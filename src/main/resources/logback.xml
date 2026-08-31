@@ -1,0 +1,21 @@
+<configuration>
+
+    <!-- Appender para exibir os logs no Console com o pattern desejado -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{ISO8601} [%thread] %-5level [runId=%X{runId}] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Níveis específicos para pacotes -->
+    <logger name="org.jooq.info" level="INFO" />
+    <logger name="org.jooq" level="DEBUG" />
+    <logger name="arun" level="INFO" />
+    <logger name="software.amazon.awssdk.http.apache.internal.conn.IdleConnectionReaper" level="OFF" />
+
+    <!-- Nível raiz (Root) -->
+    <root level="DEBUG">
+        <appender-ref ref="STDOUT" />
+    </root>
+
+</configuration>

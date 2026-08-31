@@ -1,0 +1,61 @@
+database:
+  url: ${DB_URL}
+  username: ${DB_USER}
+  password: ${DB_PASSWORD}
+  minimum-idle: 5
+  maximum-pool-size: 50
+  connection-timeout-ms: 15000
+  idle-timeout: 300000
+  max-lifetime: 1800000
+  pool-name: asset-processor-pool
+  connection-init-sql: SELECT 1
+  schema: b2c
+
+cloud:
+  aws:
+    region:
+      static: eu-west-1
+    credentials:
+      # Em dev local: usa access-key/secret-key OU o profile do ~/.aws/credentials
+      # Em ambiente AWS (ECS/EC2/EKS): remove estas linhas, usa IAM role automático
+      profile:
+        name: pisca-dev
+    s3:
+      # Opcional: aumentar timeouts para arquivos grandes
+      path-style-access-enabled: false
+
+#
+# B2C application properties
+#
+b2c:
+  companies:
+    efs:
+      garbage-collector:
+        # Define a origem dos arquivos de log: S3 ou LOCAL
+        source-type: ${GC_SOURCE_TYPE}
+
+        # Caminho do diretório local (caso source-type seja LOCAL)
+        local-path: ${LOCAL_LOGS_PATH}
+
+        # Diretório local onde os arquivos órfãos são movidos quando OrphanAction=MOVE_TO_QUARANTINE
+        quarantine-path: ${ASSET_LOCATION_PATH}${QUARANTINE_FOLDER}
+
+        # Paralelismo de arquivos S3 (quando command.mode=PARALLEL_FILES)
+        default-parallel-files: 2
+        max-parallel-files: 3
+
+        # Threads internas por arquivo (dentro do EfsFileWorker)
+        worker-threads: 64
+
+        s3:
+          bucket: ${S3_BUCKET_NAME}
+          companies-prefix: efs_logs_companies/
+          persons-prefix: efs_logs_persons/
+          # Buffer usado ao ler o InputStream do S3 linha-a-linha (bytes)
+          read-buffer-size: 1048576        # 1 MiB
+          # Timeout por chamada individual ao S3 (não o download completo)
+          api-call-attempt-timeout-seconds: 300
+          # Tag key usada para marcar objetos já processados
+          processed-tag-key: efs-gc-processed
+          # Nº máximo de chamadas GetObjectTagging em paralelo ao listar
+          tagging-lookup-parallelism: 8
