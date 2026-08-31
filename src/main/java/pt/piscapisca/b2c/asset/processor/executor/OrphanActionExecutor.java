@@ -1,7 +1,6 @@
 package pt.piscapisca.b2c.asset.processor.executor;
 
-import pt.piscapisca.b2c.asset.processor.EfsFileWorker;
-import pt.piscapisca.b2c.asset.processor.OrphanActionExecutorRegistry;
+import pt.piscapisca.b2c.asset.processor.execution.EfsFileWorker;
 import pt.piscapisca.b2c.asset.processor.dto.DevAssetGarbageCollectionCommand.OrphanAction;
 
 import java.nio.file.Path;

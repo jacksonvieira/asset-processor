@@ -1,4 +1,4 @@
-package pt.piscapisca.b2c.asset.processor;
+package pt.piscapisca.b2c.asset.processor.domain.model;
 
 /**
  * Represents a log file stored in S3 that lists EFS paths belonging to a single company or person. Being a

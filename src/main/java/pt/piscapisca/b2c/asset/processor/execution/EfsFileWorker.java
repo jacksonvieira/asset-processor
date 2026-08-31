@@ -1,12 +1,10 @@
-package pt.piscapisca.b2c.asset.processor;
+package pt.piscapisca.b2c.asset.processor.execution;
 
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import pt.piscapisca.b2c.asset.processor.dto.DevAssetGarbageCollectionCommand.OrphanAction;
 import pt.piscapisca.b2c.utils.B2CExceptionUtils;
 
-import java.io.BufferedReader;
-import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -89,7 +87,8 @@ public class EfsFileWorker {
 		this.startTime = Instant.now();
 		this.currentSourceId = sourceId;
 		this.isShutdown.set( false );
-		log.debug( "Starting processing of source: {}", sourceId );
+		log.info( "Starting processing worker for source | sourceId={} | dryRun={} | action={}",
+				sourceId, dryRun, orphanAction );
 	}
 
 	public void processSingleLine( String line, String sourceId ) {
@@ -110,10 +109,10 @@ public class EfsFileWorker {
 			executor.submit( createProcessingTask( rawLine, normalizedPath, sourceId, mdcSnapshot ) );
 		}
 		catch ( RejectedExecutionException ex ) {
-			log.error( "Task rejected (executor shutting down): {}", normalizedPath );
+			log.error( "Task rejected (executor shutting down) | path={}", normalizedPath );
 		}
 		catch ( Exception e ) {
-			log.error( "Unexpected error submitting task: {} | {}", normalizedPath, B2CExceptionUtils.toMap( e ) );
+			log.error( "Unexpected error submitting task | path={} | {}", normalizedPath, B2CExceptionUtils.toMap( e ) );
 		}
 	}
 
@@ -129,7 +128,7 @@ public class EfsFileWorker {
 				updateCounters( actionApplied, fileSize );
 			}
 			catch ( Exception e ) {
-				log.error( "Error processing file: {} | {}", normalizedPath, B2CExceptionUtils.toMap( e ) );
+				log.error( "Error executing processing task for file | path={} | {}", normalizedPath, B2CExceptionUtils.toMap( e ) );
 			}
 			finally {
 				MDC.clear();
@@ -151,21 +150,21 @@ public class EfsFileWorker {
 		return rawPath;
 	}
 
-	private void updateCounters( boolean wouldDelete, long fileSize ) {
+	private void updateCounters( boolean actionApplied, long fileSize ) {
 		processedBytes.addAndGet( fileSize );
 
-		if ( wouldDelete ) {
+		if ( actionApplied ) {
 			deletedBytes.addAndGet( fileSize );
 
 			long count = deletedCount.incrementAndGet();
 			if ( dryRun && count % 1000 == 0 ) {
-				log.info( "[DRY-RUN] {} files matched for deletion so far (source={}).", count, currentSourceId );
+				log.info( "[DRY-RUN] Files matched for action so far | count={} | sourceId={}", count, currentSourceId );
 			}
 		}
 
 		long count = processedCount.incrementAndGet();
 		if ( count % 10000 == 0 ) {
-			log.info( "Progress [{}]: {} files processed. Queue size: {}",
+			log.info( "Processing progress update | sourceId={} | processedFiles={} | queueSize={}",
 					currentSourceId, count, executor.getQueue().size()
 			);
 		}
@@ -176,18 +175,18 @@ public class EfsFileWorker {
 			return;
 		}
 
-		log.info( "Shutting down executor for source: {}", currentSourceId );
+		log.info( "Shutting down executor for source | sourceId={}", currentSourceId );
 		executor.shutdown();
 		try {
 			if ( !executor.awaitTermination( executorTimeoutMinutes, TimeUnit.MINUTES ) ) {
-				log.error( "Timeout! Not all tasks finished within {} minutes (source={}).",
+				log.error( "Timeout! Not all tasks finished within limit | timeoutMinutes={} | sourceId={}",
 						executorTimeoutMinutes, currentSourceId
 				);
 			}
 			logFinalStats();
 		}
 		catch ( InterruptedException e ) {
-			log.error( "Interrupted during shutdown: {}", B2CExceptionUtils.toMap( e ) );
+			log.error( "Interrupted during executor shutdown | {}", B2CExceptionUtils.toMap( e ) );
 			Thread.currentThread().interrupt();
 		}
 	}
@@ -200,11 +199,10 @@ public class EfsFileWorker {
 		Duration duration = Duration.between( startTime, end );
 
 		long totalProcessed = processedCount.get();
-		long totalDeleted = deletedCount.get();
+		long totalActioned = deletedCount.get();
 
-		// Conversão de Bytes para Gigabytes (GB)
 		double processedGigaBytes = processedBytes.get() / ( 1024.0 * 1024.0 * 1024.0 );
-		double deletedGigaBytes = deletedBytes.get() / ( 1024.0 * 1024.0 * 1024.0 );
+		double actionedGigaBytes = deletedBytes.get() / ( 1024.0 * 1024.0 * 1024.0 );
 
 		String elapsed = String.format( "%02dh %02dm %02ds",
 				duration.toHoursPart(), duration.toMinutesPart(), duration.toSecondsPart()
@@ -222,9 +220,9 @@ public class EfsFileWorker {
 				totalProcessed,
 				processedGigaBytes,
 				actionLabel,
-				totalDeleted,
+				totalActioned,
 				actionLabel,
-				deletedGigaBytes,
+				actionedGigaBytes,
 				Math.round( rate )
 		);
 

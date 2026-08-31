@@ -1,7 +1,10 @@
-package pt.piscapisca.b2c.asset.processor;
+package pt.piscapisca.b2c.asset.processor.infra.source;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.piscapisca.b2c.asset.processor.domain.model.S3LogFile;
+import pt.piscapisca.b2c.asset.processor.domain.source.LogFileSource;
 import pt.piscapisca.b2c.asset.processor.dto.DevAssetGarbageCollectionCommand.Scope;
+import pt.piscapisca.b2c.utils.B2CExceptionUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -16,6 +19,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+/**
+ * Local file system implementation of {@link LogFileSource} used for reading
+ * and managing garbage collection log files during local development or debugging.
+ */
 @Slf4j
 public class LocalLogFileSource implements LogFileSource {
 
@@ -27,6 +34,11 @@ public class LocalLogFileSource implements LogFileSource {
 
 	private final Path localDirectory;
 
+	/**
+	 * Constructs a new {@code LocalLogFileSource} with the specified local directory path.
+	 *
+	 * @param localPathStr the path to the local directory containing log files
+	 */
 	public LocalLogFileSource( String localPathStr ) {
 		this.localDirectory = Paths.get( localPathStr );
 	}
@@ -36,7 +48,7 @@ public class LocalLogFileSource implements LogFileSource {
 		Pattern pattern = scope == Scope.COMPANIES ? COMPANY_PATTERN : PERSON_PATTERN;
 
 		if ( !Files.exists( localDirectory ) || !Files.isDirectory( localDirectory ) ) {
-			log.warn( "Local log directory does not exist or is not a directory: {}", localDirectory );
+			log.warn( "Local log directory does not exist or is not a directory | directory={}", localDirectory );
 			return List.of();
 		}
 
@@ -45,7 +57,7 @@ public class LocalLogFileSource implements LogFileSource {
 					.filter( Files::isRegularFile )
 					.filter( p -> {
 						String fileName = p.getFileName().toString();
-						// Ignora arquivos que já possuem o sufixo de processados
+						// Ignore files that already have the processed suffix
 						if ( fileName.endsWith( PROCESSED_SUFFIX ) ) {
 							return false;
 						}
@@ -59,11 +71,12 @@ public class LocalLogFileSource implements LogFileSource {
 							String entityId = m.group( 1 );
 							try {
 								long size = Files.size( p );
-								// Usamos o caminho absoluto em string no campo 'key' para mantermos a compatibilidade do modelo
+								// Use the absolute path string in the 'key' field to maintain model compatibility
 								return new S3LogFile( p.toAbsolutePath().toString(), entityId, size );
 							}
 							catch ( IOException e ) {
-								log.error( "Failed to read size for local file: {}", p, e );
+								log.error( "Failed to read size for local file | file={} | error={}", p, e.getMessage(),
+										e );
 								return null;
 							}
 						}
@@ -72,20 +85,21 @@ public class LocalLogFileSource implements LogFileSource {
 					.filter( java.util.Objects::nonNull )
 					.toList();
 
-			// Aplica o filtro de IDs se houver
+			// Apply ID filter if present
 			List<S3LogFile> filtered = ( idFilter == null || idFilter.isEmpty() )
 					? allFiles
 					: allFiles.stream().filter( f -> idFilter.contains( f.entityId() ) ).toList();
 
 			if ( skipAlreadyProcessed ) {
-				// No modo local, se já existe um arquivo correspondente com o sufixo de processado, podemos filtrá-lo
+				// In local mode, if a corresponding file with the processed suffix exists, filter it out
 				return filtered.stream().filter( f -> !isProcessed( f ) ).toList();
 			}
 
 			return filtered;
 		}
 		catch ( IOException e ) {
-			log.error( "Error listing local files in directory: {}", localDirectory, e );
+			log.error( "Error listing local files in directory | directory={} | error={}", localDirectory,
+					B2CExceptionUtils.toMap( e ), e );
 			return List.of();
 		}
 	}
@@ -108,16 +122,17 @@ public class LocalLogFileSource implements LogFileSource {
 			Path parentDir = originalPath.getParent();
 			String originalFileName = originalPath.getFileName().toString();
 
-			// Cria o nome do novo arquivo com o sufixo indicando que foi processado
+			// Create the new file name with the suffix indicating it has been processed
 			String newFileName = originalFileName.replace( ".txt", PROCESSED_SUFFIX );
 			Path processedPath = parentDir != null ? parentDir.resolve( newFileName ) : Paths.get( newFileName );
 
-			// Move/Renomeia o arquivo original para o novo arquivo de processados (ou limpo/finalizado)
+			// Move/Rename the original file to the new processed file
 			Files.move( originalPath, processedPath, StandardCopyOption.REPLACE_EXISTING );
-			log.info( "Marked local file as processed by renaming to: {} | runId={}", processedPath, runId );
+			log.info( "Marked local file as processed by renaming | processedPath={} | runId={}", processedPath,
+					runId );
 		}
 		catch ( IOException e ) {
-			log.error( "Failed to mark local file as processed: {}", file.key(), e );
+			log.error( "Failed to mark local file as processed | file={} | error={}", file.key(), e.getMessage(), e );
 		}
 	}
 

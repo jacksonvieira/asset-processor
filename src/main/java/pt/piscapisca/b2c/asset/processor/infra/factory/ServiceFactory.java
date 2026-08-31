@@ -1,15 +1,16 @@
 package pt.piscapisca.b2c.asset.processor.infra.factory;
 
 import org.jooq.DSLContext;
-import pt.piscapisca.b2c.asset.processor.*;
 import pt.piscapisca.b2c.asset.processor.config.AppConfig;
-import pt.piscapisca.b2c.asset.processor.executor.DeleteOrphanActionExecutor;
-import pt.piscapisca.b2c.asset.processor.executor.OrphanActionExecutor;
-import pt.piscapisca.b2c.asset.processor.executor.QuarantineOrphanActionExecutor;
-import pt.piscapisca.b2c.asset.processor.executor.WriteToRemoveFileOrphanActionExecutor;
+import pt.piscapisca.b2c.asset.processor.domain.source.LogFileSource;
+import pt.piscapisca.b2c.asset.processor.execution.EfsFileProcessor;
+import pt.piscapisca.b2c.asset.processor.executor.*;
 import pt.piscapisca.b2c.asset.processor.infra.EfsGarbageCollectorProperties;
 import pt.piscapisca.b2c.asset.processor.infra.EfsGarbageCollectorS3Properties;
-import pt.piscapisca.b2c.asset.processor.repository.*;
+import pt.piscapisca.b2c.asset.processor.infra.persistence.*;
+import pt.piscapisca.b2c.asset.processor.infra.source.LocalLogFileSource;
+import pt.piscapisca.b2c.asset.processor.infra.source.S3LogFileSourceImpl;
+import pt.piscapisca.b2c.asset.processor.parser.PathDataExtractor;
 import pt.piscapisca.b2c.asset.processor.service.AssetLookupCacheService;
 import pt.piscapisca.b2c.asset.processor.service.AssetOrphaningService;
 import pt.piscapisca.b2c.asset.processor.service.EfsGarbageCollectorService;
@@ -17,10 +18,19 @@ import software.amazon.awssdk.services.s3.S3Client;
 
 import java.util.List;
 
+/**
+ * Factory responsible for wiring and instantiating the main garbage collection service
+ * along with all its required infrastructure components, repositories, and executors.
+ */
 public class ServiceFactory {
 
 	/**
-	 * Cria e retorna o serviço principal de Garbage Collection já com todas as dependências injetadas.
+	 * Creates and returns the main Garbage Collection service with all dependencies fully injected
+	 * based on the provided configuration and database context.
+	 *
+	 * @param dsl    the jOOQ {@link DSLContext} for database persistence operations
+	 * @param config the application configuration mapping properties from YAML
+	 * @return a fully initialized {@link EfsGarbageCollectorService} instance
 	 */
 	public static EfsGarbageCollectorService createGarbageCollectorService(
 			DSLContext dsl,
@@ -39,11 +49,11 @@ public class ServiceFactory {
 		String sourceType = gcConfig.sourceType() != null ? gcConfig.sourceType().trim().toUpperCase() : "S3";
 
 		if ( "LOCAL".equals( sourceType ) ) {
-			// Se for LOCAL, nenhum S3Client é criado ou alocado na memória
+			// If LOCAL, no S3Client is created or allocated in memory
 			logFileSource = new LocalLogFileSource( gcConfig.localPath() );
 		}
 		else {
-			// Se for S3, o cliente é criado sob demanda e encapsulado na fonte
+			// If S3, the client is created on-demand and encapsulated within the source provider
 			S3Client s3Client = S3ClientFactory.create( config.cloud().aws() );
 			var s3Yaml = gcConfig.s3();
 
@@ -64,13 +74,22 @@ public class ServiceFactory {
 		EfsFileProcessor efsFileProcessor = createEfsFileProcessor( dsl, lookupCacheService, gcProperties );
 
 		return new EfsGarbageCollectorService(
-				efsFileProcessor,
 				gcProperties,
+				efsFileProcessor,
 				lookupCacheService,
 				logFileSource
 		);
 	}
 
+	/**
+	 * Instantiates and configures the {@link EfsFileProcessor} with its required data extractors,
+	 * orphaning services, and action executors registry.
+	 *
+	 * @param dsl                the jOOQ database context
+	 * @param lookupCacheService the asset cache service for fast validation
+	 * @param gcProperties       garbage collection runtime properties
+	 * @return a configured {@link EfsFileProcessor} instance
+	 */
 	private static EfsFileProcessor createEfsFileProcessor(
 			DSLContext dsl,
 			AssetLookupCacheService lookupCacheService,
@@ -91,6 +110,12 @@ public class ServiceFactory {
 		return new EfsFileProcessor( dataExtractor, orphaningService, executorRegistry );
 	}
 
+	/**
+	 * Instantiates the {@link AssetLookupCacheService} injecting all required domain repositories.
+	 *
+	 * @param dsl the jOOQ database context
+	 * @return a configured {@link AssetLookupCacheService} instance
+	 */
 	private static AssetLookupCacheService createAssetLookupCacheService( DSLContext dsl ) {
 		return new AssetLookupCacheService(
 				new VehicleRepository( dsl ),

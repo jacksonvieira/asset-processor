@@ -1,20 +1,40 @@
 <configuration>
 
-    <!-- Appender para exibir os logs no Console com o pattern desejado -->
+    <!-- Appender para Console -->
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>%d{ISO8601} [%thread] %-5level [runId=%X{runId}] %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
-    <!-- Níveis específicos para pacotes -->
-    <logger name="org.jooq.info" level="INFO" />
-    <logger name="org.jooq" level="DEBUG" />
-    <logger name="arun" level="INFO" />
-    <logger name="software.amazon.awssdk.http.apache.internal.conn.IdleConnectionReaper" level="OFF" />
+    <!-- ========================================== -->
+    <!-- Níveis por Camadas e Módulos do Sistema    -->
+    <!-- ========================================== -->
 
-    <!-- Nível raiz (Root) -->
-    <root level="DEBUG">
+    <!-- Regra de negócio e orquestração principal: INFO para auditoria de início/fim de arquivos -->
+    <logger name="pt.piscapisca.b2c.asset.processor.service" level="INFO" />
+
+    <!-- Fluxo de execução/workers: INFO para ver progresso por blocos, ou DEBUG se quiser rastrear linha a linha (cuidado com volume) -->
+    <logger name="pt.piscapisca.b2c.asset.processor.execution" level="INFO" />
+
+    <!-- Executores de ações (Delete/Quarantine): INFO para registrar exatamente o que foi alterado/apagado -->
+    <logger name="pt.piscapisca.b2c.asset.processor.executor" level="INFO" />
+
+    <!-- Repositórios e Banco de Dados: WARN para evitar logar queries SQL repetitivas em massa -->
+    <logger name="pt.piscapisca.b2c.asset.processor.infra.persistence" level="WARN" />
+
+    <!-- ========================================== -->
+    <!-- Bibliotecas de Terceiros                   -->
+    <!-- ========================================== -->
+
+    <!-- Silencia logs ruidosos do jOOQ e AWS SDK -->
+    <logger name="org.jooq" level="WARN" />
+    <logger name="software.amazon.awssdk" level="WARN" />
+    <logger name="software.amazon.awssdk.http.apache.internal.conn.IdleConnectionReaper" level="OFF" />
+    <logger name="com.zaxxer.hikari" level="INFO" />
+
+    <!-- Nível raiz (Root) padrão para o resto da aplicação -->
+    <root level="INFO">
         <appender-ref ref="STDOUT" />
     </root>
 

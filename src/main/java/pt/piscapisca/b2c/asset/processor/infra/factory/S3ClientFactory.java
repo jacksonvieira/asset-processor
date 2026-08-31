@@ -12,13 +12,18 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 
 import java.time.Duration;
 
+/**
+ * Factory responsible for creating and configuring optimized {@link S3Client} instances
+ * using the application's AWS configuration properties.
+ */
 public class S3ClientFactory {
 
 	/**
-	 * Cria e configura uma instância otimizada do S3Client utilizando o record de configuração.
+	 * Creates and configures an optimized {@link S3Client} instance with custom timeouts,
+	 * Apache HTTP connection pool settings, path-style access rules, and credential providers.
 	 *
-	 * @param awsConfig Configurações de Cloud/AWS mapeadas do YAML.
-	 * @return {@link S3Client} configurado.
+	 * @param awsConfig cloud and AWS configuration mapping properties from the YAML configuration
+	 * @return a fully configured {@link S3Client} instance
 	 */
 	public static S3Client create( AppConfig.CloudConfig.AwsConfig awsConfig) {
 		String regionName = awsConfig.region().staticRegion();
@@ -46,11 +51,19 @@ public class S3ClientFactory {
 				.build();
 	}
 
+	/**
+	 * Resolves the appropriate {@link AwsCredentialsProvider} based on the profile configuration.
+	 * Falls back to {@link DefaultCredentialsProvider} (e.g., retrieving the instance IAM Role on EC2 or ECS)
+	 * if no explicit profile is provided.
+	 *
+	 * @param awsProfile optional AWS profile name
+	 * @return the resolved {@link AwsCredentialsProvider}
+	 */
 	private static AwsCredentialsProvider resolveCredentialsProvider(String awsProfile) {
 		if (awsProfile != null && !awsProfile.isBlank()) {
 			return ProfileCredentialsProvider.create(awsProfile);
 		}
-		// Na EC2, isso pegará automaticamente a IAM Role associada à instância
+		// On EC2/ECS, this automatically falls back to the IAM Role associated with the instance
 		return DefaultCredentialsProvider.builder().build();
 	}
 }

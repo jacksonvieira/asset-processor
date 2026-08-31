@@ -7,12 +7,20 @@ import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
 import pt.piscapisca.b2c.asset.processor.config.AppConfig;
 
+/**
+ * Factory responsible for initializing and managing the HikariCP connection pool
+ * and providing configured jOOQ {@link DSLContext} instances for PostgreSQL persistence.
+ */
 public class DatabaseFactory {
 
 	private static HikariDataSource dataSource;
 
 	/**
-	 * Inicializa o Pool de Conexões HikariCP e retorna o contexto do jOOQ (DSLContext).
+	 * Initializes the HikariCP connection pool based on the provided database configuration
+	 * and returns a PostgreSQL-dialect jOOQ {@link DSLContext}.
+	 *
+	 * @param dbConfig configuration properties containing JDBC URL, credentials, pool sizes, and timeouts
+	 * @return a configured {@link DSLContext} ready for executing database operations
 	 */
 	public static DSLContext createDSLContext( AppConfig.DatabaseConfig dbConfig ) {
 		HikariConfig config = new HikariConfig();
@@ -41,7 +49,7 @@ public class DatabaseFactory {
 	}
 
 	/**
-	 * Fecha o pool de conexões ao encerrar a aplicação.
+	 * Gracefully closes the underlying HikariCP connection pool during application shutdown.
 	 */
 	public static void close() {
 		if ( dataSource != null && !dataSource.isClosed() ) {

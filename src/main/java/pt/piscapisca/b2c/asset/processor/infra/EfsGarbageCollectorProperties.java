@@ -2,7 +2,7 @@ package pt.piscapisca.b2c.asset.processor.infra;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import pt.piscapisca.b2c.asset.processor.EfsFileWorker;
+import pt.piscapisca.b2c.asset.processor.execution.EfsFileWorker;
 
 /**
  * Configuration for the EFS asset garbage collector.

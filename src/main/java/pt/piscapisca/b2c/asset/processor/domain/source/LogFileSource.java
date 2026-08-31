@@ -1,5 +1,6 @@
-package pt.piscapisca.b2c.asset.processor;
+package pt.piscapisca.b2c.asset.processor.domain.source;
 
+import pt.piscapisca.b2c.asset.processor.domain.model.S3LogFile;
 import pt.piscapisca.b2c.asset.processor.dto.DevAssetGarbageCollectionCommand.Scope;
 
 import java.io.BufferedReader;

@@ -1,6 +1,8 @@
-package pt.piscapisca.b2c.asset.processor;
+package pt.piscapisca.b2c.asset.processor.infra.source;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.piscapisca.b2c.asset.processor.domain.model.S3LogFile;
+import pt.piscapisca.b2c.asset.processor.domain.source.LogFileSource;
 import pt.piscapisca.b2c.asset.processor.dto.DevAssetGarbageCollectionCommand.Scope;
 import pt.piscapisca.b2c.asset.processor.infra.EfsGarbageCollectorS3Properties;
 import software.amazon.awssdk.core.ResponseInputStream;
@@ -78,7 +80,7 @@ public class S3LogFileSourceImpl implements LogFileSource, AutoCloseable {
 		);
 
 		List<S3LogFile> all = listAll( prefix, pattern );
-		log.info( "Found {} log file(s) under prefix {}", all.size(), prefix );
+		log.info( "Found log files under prefix | count={} | prefix={}", all.size(), prefix );
 
 		// Client-side ID filter — S3 does not support "prefix + arbitrary substring" natively, so we filter after list.
 		// For very large buckets consider partitioning the prefix by ID hash to avoid over-listing.
@@ -87,13 +89,14 @@ public class S3LogFileSourceImpl implements LogFileSource, AutoCloseable {
 				: all.stream().filter( f -> idFilter.contains( f.entityId() ) ).toList();
 
 		if ( idFilter != null && !idFilter.isEmpty() ) {
-			log.info( "After ID filter: {} of {} file(s) retained (idFilterSize={})",
+			log.info( "After ID filter applied | retainedCount={} | totalCount={} | idFilterSize={}",
 					filtered.size(), all.size(), idFilter.size()
 			);
 		}
 
 		if ( !skipAlreadyProcessed ) {
-			log.debug( "skipAlreadyProcessed=false — returning {} file(s) without tag lookup", filtered.size() );
+			log.debug( "skipAlreadyProcessed is false — returning files without tag lookup | count={}",
+					filtered.size() );
 			return filtered;
 		}
 
@@ -130,7 +133,7 @@ public class S3LogFileSourceImpl implements LogFileSource, AutoCloseable {
 				}
 				else {
 					ignored++;
-					log.debug( "Ignoring unrecognised S3 key: {}", obj.key() );
+					log.debug( "Ignoring unrecognised S3 key | key={}", obj.key() );
 				}
 			}
 
@@ -179,7 +182,7 @@ public class S3LogFileSourceImpl implements LogFileSource, AutoCloseable {
 			try {
 				if ( !pool.awaitTermination( TAGGING_LOOKUP_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS ) ) {
 					log.warn(
-							"Tagging lookup pool did not terminate within {}s — forcing shutdownNow",
+							"Tagging lookup pool did not terminate within timeout — forcing shutdownNow | timeoutSeconds={}",
 							TAGGING_LOOKUP_SHUTDOWN_TIMEOUT_SECONDS
 					);
 					pool.shutdownNow();
@@ -245,7 +248,8 @@ public class S3LogFileSourceImpl implements LogFileSource, AutoCloseable {
 		}
 		catch ( Exception e ) {
 			// Fail-open: any error → treat as NOT processed. Re-processing is idempotent, silently skipping is not.
-			log.warn( "Failed to read tags for {} — assuming NOT processed | {}", file.key(), e.getMessage() );
+			log.warn( "Failed to read tags — assuming NOT processed | key={} | error={}", file.key(), e.getMessage(),
+					e );
 			return false;
 		}
 	}

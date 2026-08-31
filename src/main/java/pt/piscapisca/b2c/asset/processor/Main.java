@@ -26,20 +26,20 @@ public class Main implements Runnable {
 		dotenv.entries().forEach( entry -> System.setProperty( entry.getKey(), entry.getValue() ) );
 
 		command.validate();
-		log.info( "Iniciando processamento com scope={}", command.scope() );
+		log.info( "Starting processing with scope={}", command.scope() );
 
 		try {
 			AppConfig config = ConfigLoader.load();
 			DSLContext dsl = DatabaseFactory.createDSLContext( config.database() );
 
 			try {
-				// O try-with-resources garante o fechamento do serviço e de todos os recursos internos (S3Client, etc.)
+				// The try-with-resources statement ensures proper closing of the service and all internal resources (S3Client, etc.)
 				try ( EfsGarbageCollectorService efsProcessorApplication = ServiceFactory.createGarbageCollectorService(
 						dsl,
 						config
 				) ) {
 					efsProcessorApplication.run( command );
-					log.info( "Processamento finalizado com sucesso!" );
+					log.info( "Processing completed successfully!" );
 				}
 			}
 			finally {
@@ -47,7 +47,7 @@ public class Main implements Runnable {
 			}
 		}
 		catch ( Exception e ) {
-			log.error( "Erro fatal durante o processamento", e );
+			log.error( "Fatal error during processing", e );
 			System.exit( 1 );
 		}
 	}

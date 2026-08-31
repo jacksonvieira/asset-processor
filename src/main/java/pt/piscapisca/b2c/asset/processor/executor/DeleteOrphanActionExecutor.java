@@ -40,7 +40,7 @@ public class DeleteOrphanActionExecutor implements OrphanActionExecutor {
 		try {
 			boolean deleted = Files.deleteIfExists( file );
 			if ( deleted ) {
-				log.debug( "Deleted orphan file | path={}", file );
+				log.info( "Successfully deleted orphan file | path={}", file );
 				return OrphanActionOutcome.success( STATUS_DELETED );
 			}
 

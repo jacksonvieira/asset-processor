@@ -3,7 +3,7 @@ package pt.piscapisca.b2c.asset.processor.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import pt.piscapisca.b2c.asset.processor.dto.AssetDataDTO;
-import pt.piscapisca.b2c.asset.processor.repository.AssetRepository;
+import pt.piscapisca.b2c.asset.processor.infra.persistence.AssetRepository;
 
 /**
  * Service responsible for identifying orphan assets stored in EFS.
@@ -31,18 +31,19 @@ public class AssetOrphaningService {
 		}
 
 		if ( candidateAsset.getAssetType() == null ) {
-			log.warn( "Asset type is null for DTO: {}", candidateAsset );
+			log.warn( "Asset type is null | candidateAsset={}", candidateAsset );
 			return false;
 		}
 
 		log.debug(
-				"Evaluating asset. type={}, fileName={}", candidateAsset.getAssetType(), candidateAsset.getFileName() );
+				"Evaluating asset | assetType={} | fileName={}", candidateAsset.getAssetType(),
+				candidateAsset.getFileName() );
 
 		return switch ( candidateAsset.getAssetType() ) {
 			case COMPANY -> isCompanyAssetOrphan( candidateAsset );
 			case PERSON -> isPersonAssetOrphan( candidateAsset );
 			default -> {
-				log.warn( "Unknown asset type encountered: {}", candidateAsset.getAssetType() );
+				log.warn( "Unknown asset type encountered | assetType={}", candidateAsset.getAssetType() );
 				yield false;
 			}
 		};
@@ -94,73 +95,74 @@ public class AssetOrphaningService {
 	private boolean isOrphanByVehicleId( AssetDataDTO assetData, String searchFileName,
 			boolean isThumbnailColumnSearch ) {
 		var vehicleId = assetData.getVehicleId().loadId();
-		log.debug( "Validating asset against Vehicle ID: {}", vehicleId );
+		log.debug( "Validating asset against Vehicle ID | vehicleId={}", vehicleId );
 
 		// 1. Check if the Parent Vehicle exists and is active. If not, the asset is an orphan.
 		if ( !assetLookupCacheService.vehicleExists( vehicleId ) ) {
-			log.info( "Vehicle ID {} not found or inactive. Asset is an EFS orphan.", vehicleId );
+			log.info( "Vehicle ID not found or inactive, asset is an EFS orphan | vehicleId={}", vehicleId );
 			return true;
 		}
 
 		// 2. The Parent Vehicle exists. Is the Asset linked to it?
 		if ( assetRepository.existsActiveVehicleAssetByVehicleId(
 				searchFileName, vehicleId, isThumbnailColumnSearch ) ) {
-			log.debug( "Asset is actively referenced by Vehicle ID {}. Skipping deletion.", vehicleId );
+			log.debug( "Asset is actively referenced by Vehicle ID, skipping deletion | vehicleId={}", vehicleId );
 			return false; // NOT an orphan
 		}
 
 		// 3. The Parent Vehicle exists, but the image is not linked (it was removed from the Vehicle's asset list in the DB).
 		log.info(
-				"Asset is not referenced by active Vehicle ID {}. It's an EFS orphan.", vehicleId );
+				"Asset is not referenced by active Vehicle ID, it is an EFS orphan | vehicleId={}", vehicleId );
 		return true; // IS an orphan
 	}
 
 	private boolean isOrphanByStand( AssetDataDTO assetData, String searchFileName,
 			boolean isThumbnailColumnSearch ) {
 		if ( assetData.getStandId() == null ) {
-			log.warn( "Stand ID is null for asset: {}", assetData );
+			log.warn( "Stand ID is null for asset | assetData={}", assetData );
 			return false;
 		}
 		Integer standId = assetData.getStandId().loadId();
-		log.debug( "Validating asset against Stand ID: {}", standId );
+		log.debug( "Validating asset against Stand ID | standId={}", standId );
 
 		if ( !assetLookupCacheService.standExists( standId ) ) {
-			log.info( "Stand ID {} not found or inactive. Asset is an EFS orphan.", standId );
+			log.info( "Stand ID not found or inactive, asset is an EFS orphan | standId={}", standId );
 			return true;
 		}
 		if ( assetRepository.existsStandAssetByStandId( searchFileName, standId, isThumbnailColumnSearch ) ) {
-			log.debug( "Stand asset is referenced by Stand ID {}. Skipping deletion.", standId );
+			log.debug( "Stand asset is referenced by Stand ID, skipping deletion | standId={}", standId );
 			return false;
 		}
-		log.info( "Stand asset is not referenced by Stand ID {}. It's an EFS orphan.", standId );
+		log.info( "Stand asset is not referenced by Stand ID, it is an EFS orphan | standId={}", standId );
 		return true;
 	}
 
 	private boolean isOrphanByCompany( AssetDataDTO assetData, String searchFileName,
 			boolean isThumbnailColumnSearch ) {
 		if ( assetData.getCompanyId() == null ) {
-			log.warn( "Company ID is null for asset: {}", assetData );
+			log.warn( "Company ID is null for asset | assetData={}", assetData );
 			return false;
 		}
 		Integer companyId = assetData.getCompanyId().loadId();
-		log.debug( "Validating asset against Company ID: {}", companyId );
+		log.debug( "Validating asset against Company ID | companyId={}", companyId );
 
 		if ( !assetLookupCacheService.companyExists( companyId ) ) {
-			log.info( "Company ID {} not found or inactive. Asset is an EFS orphan.", companyId );
+			log.info( "Company ID not found or inactive, asset is an EFS orphan | companyId={}", companyId );
 			return true;
 		}
 
 		if ( assetRepository.existsCompanyLogoAsset( companyId, searchFileName, isThumbnailColumnSearch ) ) {
-			log.debug( "Company asset logo is referenced by Company ID {}. Skipping deletion.", companyId );
+			log.debug( "Company asset logo is referenced by Company ID, skipping deletion | companyId={}", companyId );
 			return false;
 		}
 
 		if ( assetRepository.existsCompanyLogoTypeAsset( companyId, searchFileName, isThumbnailColumnSearch ) ) {
-			log.debug( "Company asset logo type is referenced by Company ID {}. Skipping deletion.", companyId );
+			log.debug( "Company asset logo type is referenced by Company ID, skipping deletion | companyId={}",
+					companyId );
 			return false;
 		}
 
-		log.info( "Company asset is not referenced by Company ID {}. It's an EFS orphan.", companyId );
+		log.info( "Company asset is not referenced by Company ID, it is an EFS orphan | companyId={}", companyId );
 		return true;
 	}
 
@@ -175,24 +177,25 @@ public class AssetOrphaningService {
 	private boolean isOrphanByVehicleUuid( AssetDataDTO assetData, String searchFileName,
 			boolean isThumbnailColumnSearch ) {
 		var vehicleUuid = assetData.getVehicleUuid();
-		log.debug( "Validating asset against Vehicle UUID: {}", vehicleUuid );
+		log.debug( "Validating asset against Vehicle UUID | vehicleUuid={}", vehicleUuid );
 
 		// 1. Check if the Parent Vehicle exists and is active. If not, the asset is an orphan.
 		if ( !assetLookupCacheService.vehicleExists( vehicleUuid ) ) {
-			log.info( "Vehicle UUID {} not found or inactive. Asset is an EFS orphan.", vehicleUuid );
+			log.info( "Vehicle UUID not found or inactive, asset is an EFS orphan | vehicleUuid={}", vehicleUuid );
 			return true;
 		}
 
 		// 2. The Parent Vehicle exists. Is the Asset linked to it?
 		if ( assetRepository.existsActiveVehicleAssetByVehicleUuid(
 				searchFileName, vehicleUuid, isThumbnailColumnSearch ) ) {
-			log.debug( "Asset is actively referenced by Vehicle UUID {}. Skipping deletion.", vehicleUuid );
+			log.debug( "Asset is actively referenced by Vehicle UUID, skipping deletion | vehicleUuid={}",
+					vehicleUuid );
 			return false; // NOT an orphan
 		}
 
 		// 3. The Parent Vehicle exists, but the image is not linked (it was removed from the Vehicle's asset list in the DB).
 		log.info(
-				"Asset is not referenced by active Vehicle UUID {}. It's an EFS orphan.", vehicleUuid
+				"Asset is not referenced by active Vehicle UUID, it is an EFS orphan | vehicleUuid={}", vehicleUuid
 		);
 		return true; // IS an orphan
 	}
@@ -200,7 +203,7 @@ public class AssetOrphaningService {
 	private boolean isPersonAssetOrphan( AssetDataDTO candidateAsset ) {
 
 		if ( candidateAsset.getPersonId() == null ) {
-			log.warn( "Person ID is null for person asset DTO: {}", candidateAsset );
+			log.warn( "Person ID is null for person asset DTO | candidateAsset={}", candidateAsset );
 			return false;
 		}
 
@@ -213,7 +216,7 @@ public class AssetOrphaningService {
 
 		// 1. Person must exist first. If not, the entire branch (incl. vehicles under it) is orphan.
 		if ( !assetLookupCacheService.personExists( personId ) ) {
-			log.info( "Person ID {} not found or inactive. Asset is an EFS orphan.", personId );
+			log.info( "Person ID not found or inactive, asset is an EFS orphan | personId={}", personId );
 			return true;
 		}
 
@@ -225,7 +228,8 @@ public class AssetOrphaningService {
 
 			Integer vehicleId = candidateAsset.getVehicleId().loadId();
 			if ( !assetLookupCacheService.vehicleBelongsToPerson( vehicleId, personId ) ) {
-				log.info( "Vehicle ID {} no longer belongs to Person ID {}. Asset is an EFS orphan.",
+				log.info(
+						"Vehicle ID no longer belongs to Person ID, asset is an EFS orphan | vehicleId={} | personId={}",
 						vehicleId, personId
 				);
 				return true;
@@ -238,7 +242,8 @@ public class AssetOrphaningService {
 			String vehicleUuid = candidateAsset.getVehicleUuid();
 
 			if ( !assetLookupCacheService.vehicleBelongsToPerson( vehicleUuid, personId ) ) {
-				log.info( "Vehicle UUID {} no longer belongs to Person ID {}. Asset is an EFS orphan.",
+				log.info(
+						"Vehicle UUID no longer belongs to Person ID, asset is an EFS orphan | vehicleUuid={} | personId={}",
 						vehicleUuid, personId
 				);
 				return true;
@@ -256,13 +261,13 @@ public class AssetOrphaningService {
 
 		Integer personId = assetData.getPersonId().loadId();
 
-		log.debug( "Validating asset against Person ID: {}", personId );
+		log.debug( "Validating asset against Person ID | personId={}", personId );
 
 		if ( assetRepository.existsPersonProfileAsset( personId, searchFileName, isThumbnailColumnSearch ) ) {
-			log.debug( "Person profile is referenced by Person ID {}. Skipping deletion.", personId );
+			log.debug( "Person profile is referenced by Person ID, skipping deletion | personId={}", personId );
 			return false;
 		}
-		log.info( "Person profile is not referenced by Person ID {}. It's an EFS orphan.", personId );
+		log.info( "Person profile is not referenced by Person ID, it is an EFS orphan | personId={}", personId );
 		return true;
 	}
 
@@ -275,7 +280,7 @@ public class AssetOrphaningService {
 	 */
 	private ResolvedAssetData resolveAssetData( String fileName ) {
 		if ( fileName == null ) {
-			log.debug( "Null filename provided during resolution. Returning safe defaults." );
+			log.debug( "Null filename provided during resolution, returning safe defaults." );
 			return new ResolvedAssetData( null, false );
 		}
 
@@ -285,20 +290,20 @@ public class AssetOrphaningService {
 
 		// 1. THUMBNAIL Case (t_ or thumb_): The asset is stored with the prefix in the THUMBNAIL column.
 		if ( isThumbnailFile( lowerCaseFileName ) ) {
-			log.debug( "File identified as THUMBNAIL. Searching THUMBNAIL column with full name: {}", fileName );
+			log.debug( "File identified as THUMBNAIL, searching THUMBNAIL column | fileName={}", fileName );
 			return new ResolvedAssetData( fileName, true );
 		}
 
 		// 2. MEDIUM Case (m_): This is a derivative of the original file, which is stored in the FILENAME column.
 		else if ( lowerCaseFileName.startsWith( "m_" ) ) {
-			log.debug( "File identified as MEDIUM. Removing 'm_' prefix for FILENAME column search." );
+			log.debug( "File identified as MEDIUM, removing 'm_' prefix for FILENAME search | fileName={}", fileName );
 			// Remove 'm_' to search for the original file name in the FILENAME column.
 			return new ResolvedAssetData( fileName.substring( "m_".length() ), false );
 		}
 
 		// 3. ORIGINAL Case (no prefix): Use the filename as is, searching the FILENAME column.
 		else {
-			log.debug( "File identified as ORIGINAL. Searching FILENAME column with full name: {}", fileName );
+			log.debug( "File identified as ORIGINAL, searching FILENAME column | fileName={}", fileName );
 			return new ResolvedAssetData( fileName, false );
 		}
 	}
@@ -307,12 +312,12 @@ public class AssetOrphaningService {
 		ResolvedAssetData resolvedData = resolveAssetData( fileName );
 		String searchFileName = resolvedData.lookupFileName();
 		boolean isThumbnailColumnSearch = resolvedData.useThumbnailColumn();
-		log.debug( "Resolved file name. original={}, lookup={}, column={}", fileName, searchFileName,
+		log.debug( "Resolved file name | original={} | lookup={} | column={}", fileName, searchFileName,
 				isThumbnailColumnSearch ? "THUMBNAIL" : "FILENAME"
 		);
 
 		if ( searchFileName == null ) {
-			log.warn( "Could not resolve search file name for file: {}. Skipping deletion.", fileName );
+			log.warn( "Could not resolve search file name, skipping deletion | fileName={}", fileName );
 			return null;
 		}
 		return resolvedData;

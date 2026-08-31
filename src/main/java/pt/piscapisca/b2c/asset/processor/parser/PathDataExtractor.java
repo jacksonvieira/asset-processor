@@ -1,4 +1,4 @@
-package pt.piscapisca.b2c.asset.processor;
+package pt.piscapisca.b2c.asset.processor.parser;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.piscapisca.b2c.asset.processor.dto.AssetDataDTO;

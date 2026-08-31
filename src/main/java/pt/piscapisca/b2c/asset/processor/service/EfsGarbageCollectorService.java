@@ -1,12 +1,17 @@
 package pt.piscapisca.b2c.asset.processor.service;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.scheduling.concurrent.CustomizableThreadFactory;
-import pt.piscapisca.b2c.asset.processor.*;
+import pt.piscapisca.b2c.asset.processor.domain.model.S3LogFile;
+import pt.piscapisca.b2c.asset.processor.domain.source.LogFileSource;
 import pt.piscapisca.b2c.asset.processor.dto.DevAssetGarbageCollectionCommand;
+import pt.piscapisca.b2c.asset.processor.execution.EfsFileProcessor;
+import pt.piscapisca.b2c.asset.processor.execution.EfsFileWorker;
+import pt.piscapisca.b2c.asset.processor.execution.EfsPathFilter;
 import pt.piscapisca.b2c.asset.processor.infra.EfsGarbageCollectorProperties;
-import pt.piscapisca.b2c.asset.processor.offset.FileCheckpointManager;
+import pt.piscapisca.b2c.asset.processor.infra.checkpoint.FileCheckpointManager;
 import pt.piscapisca.b2c.hashids.SecretId;
 import pt.piscapisca.b2c.utils.B2CExceptionUtils;
 
@@ -43,8 +48,8 @@ import java.util.stream.Collectors;
  * {@link LogFileSource#markAsProcessed}); subsequent runs skip them by default. Dry-run executions never tag,
  * allowing safe re-execution.
  */
-
 @Slf4j
+@RequiredArgsConstructor
 public class EfsGarbageCollectorService implements AutoCloseable {
 
 	private final EfsGarbageCollectorProperties gcProperties;
@@ -71,19 +76,6 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 	 */
 	private static final int EXECUTOR_TIMEOUT_MINUTES = 60;
 
-	public EfsGarbageCollectorService(
-			EfsFileProcessor processor,
-			EfsGarbageCollectorProperties gcProperties,
-			AssetLookupCacheService assetLookupCacheService,
-			LogFileSource logFileSource ) {
-
-		this.processor = processor;
-		this.gcProperties = gcProperties;
-		this.assetLookupCacheService = assetLookupCacheService;
-		this.logFileSource = logFileSource;
-
-	}
-
 	/**
 	 * Entry point for a garbage collection run.
 	 * <p>
@@ -96,7 +88,7 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 	 */
 	public void run( DevAssetGarbageCollectionCommand command ) {
 		if ( !running.compareAndSet( false, true ) ) {
-			log.warn( "EFS GC already running — this request will be ignored. Wait for the current run to finish." );
+			log.warn( "EFS GC already running, request ignored | runId=N/A" );
 			return;
 		}
 
@@ -118,7 +110,7 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 					command.scope(), idFilter, command.skipAlreadyProcessed() );
 
 			if ( pending.isEmpty() ) {
-				log.info( "No pending S3/Local log files match the given filters. Nothing to do. | runId={}", runId );
+				log.info( "No pending S3/Local log files match the given filters, nothing to do | runId={}", runId );
 				return;
 			}
 
@@ -141,7 +133,8 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 		}
 		catch ( Exception e ) {
 			log.error(
-					"EFS GC failed | runId={} | duration={} | {}", runId, Duration.between( runStart, Instant.now() ),
+					"EFS GC failed | runId={} | duration={} | error={}", runId,
+					Duration.between( runStart, Instant.now() ),
 					B2CExceptionUtils.toMap( e )
 			);
 		}
@@ -160,7 +153,8 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 		int index = 0;
 		for ( S3LogFile file : files ) {
 			index++;
-			log.debug( "Sequential progress | runId={} | file {}/{} | key={}", runId, index, files.size(), file.key() );
+			log.debug( "Sequential progress | runId={} | fileIndex={} | totalFiles={} | key={}", runId, index,
+					files.size(), file.key() );
 			processSingleFile( file, command, runId );
 		}
 	}
@@ -195,7 +189,8 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 			pool.shutdown();
 			try {
 				if ( !pool.awaitTermination( EXECUTOR_TIMEOUT_MINUTES, TimeUnit.MINUTES ) ) {
-					log.error( "Parallel file pool did not terminate within {} min — forcing shutdownNow | runId={}",
+					log.error(
+							"Parallel file pool did not terminate within timeout, forcing shutdownNow | runId={} | timeoutMinutes={}",
 							EXECUTOR_TIMEOUT_MINUTES, runId
 					);
 					pool.shutdownNow();
@@ -243,7 +238,7 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 		}
 		catch ( Exception e ) {
 			worker.shutdown();
-			log.error( "Error processing S3/Local file | runId={} | key={} | duration={} | {}",
+			log.error( "Error processing S3/Local file | runId={} | key={} | duration={} | error={}",
 					runId, file.key(), Duration.between( fileStart, Instant.now() ), B2CExceptionUtils.toMap( e )
 			);
 		}
@@ -287,7 +282,7 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 			catch ( Exception e ) {
 				if ( isCriticalInfrastructureError( e ) ) {
 					log.error(
-							"Critical infrastructure or database error detected. Aborting execution to prevent false positives | error={}",
+							"Critical infrastructure or database error detected, aborting execution to prevent false positives | error={}",
 							e.getMessage() );
 					if ( e instanceof RuntimeException re ) {
 						throw re;
@@ -358,7 +353,8 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 		int clamped = Math.min( value, max );
 
 		if ( requested != null && requested > max ) {
-			log.warn( "Requested parallelFiles={} exceeds max={} — clamping to {}", requested, max, clamped );
+			log.warn( "Requested parallelFiles exceeds max, clamping | requested={} | max={} | clamped={}", requested,
+					max, clamped );
 		}
 		return clamped;
 	}

@@ -1,4 +1,4 @@
-package pt.piscapisca.b2c.asset.processor;
+package pt.piscapisca.b2c.asset.processor.execution;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -6,7 +6,9 @@ import pt.piscapisca.b2c.asset.processor.dto.AssetDataDTO;
 import pt.piscapisca.b2c.asset.processor.dto.DevAssetGarbageCollectionCommand;
 import pt.piscapisca.b2c.asset.processor.dto.DevAssetGarbageCollectionCommand.OrphanAction;
 import pt.piscapisca.b2c.asset.processor.executor.OrphanActionExecutor;
+import pt.piscapisca.b2c.asset.processor.executor.OrphanActionExecutorRegistry;
 import pt.piscapisca.b2c.asset.processor.executor.WriteToRemoveFileOrphanActionExecutor;
+import pt.piscapisca.b2c.asset.processor.parser.PathDataExtractor;
 import pt.piscapisca.b2c.asset.processor.service.AssetOrphaningService;
 import pt.piscapisca.b2c.utils.B2CExceptionUtils;
 
@@ -26,7 +28,7 @@ import java.nio.file.Paths;
  * <p>
  * <b>Thread-safety:</b> this class is a stateless singleton — every field it holds is either a stateless service or
  * a thread-safe collaborator. Multiple {@link EfsFileWorker} threads may safely call
- * {@link #process(String, boolean, OrphanAction)} concurrently.
+ * {@link #process(String, String, String, boolean, OrphanAction)} concurrently.
  * <p>
  * <b>Dry-run:</b> in dry-run mode no filesystem change is made and no executor is invoked. Instead, an entry with a
  * {@code WOULD_*} status is written to the report so operators can review what would happen before committing.
@@ -54,11 +56,10 @@ public class EfsFileProcessor {
 	 * @param orphanAction   action to apply when confirmed orphan
 	 * @return {@code true} if an action was applied (or would be applied in dry-run)
 	 */
-
 	public boolean process( String rawLine, String normalizedPath, String sourceId, boolean dryRun,
 			DevAssetGarbageCollectionCommand.OrphanAction orphanAction ) {
-		log.trace( "Processing path | normalizedPath={} | dryRun={} | orphanAction={}", normalizedPath, dryRun,
-				orphanAction );
+		log.trace( "Processing path line | normalizedPath={} | sourceId={} | dryRun={} | orphanAction={}",
+				normalizedPath, sourceId, dryRun, orphanAction );
 		try {
 			// Step 1 + 2: parse + orphan check
 			if ( !isOrphanCandidate( normalizedPath ) ) {
@@ -66,7 +67,8 @@ public class EfsFileProcessor {
 			}
 
 			if ( dryRun ) {
-				log.info( "[DRY-RUN] Would apply {} on path: {}", orphanAction, normalizedPath );
+				log.info( "[DRY-RUN] Would apply action on orphan path | action={} | path={}", orphanAction,
+						normalizedPath );
 				return true;
 			}
 
@@ -87,7 +89,7 @@ public class EfsFileProcessor {
 			}
 
 			if ( outcome.success() ) {
-				log.debug( "Applied {} on orphan file | path={} | status={}",
+				log.info( "Successfully applied action on orphan file | action={} | path={} | status={}",
 						orphanAction, normalizedPath, outcome.reportStatus()
 				);
 			}
@@ -100,8 +102,8 @@ public class EfsFileProcessor {
 		}
 		catch ( Exception e ) {
 			// Catch-all: a single bad line must never abort the worker. Reported so operators can inspect later.
-			log.error( "Unexpected error while processing path | path={} | {}",
-					normalizedPath, B2CExceptionUtils.toMap( e )
+			log.error( "Unexpected error while processing path line | path={} | sourceId={} | {}",
+					normalizedPath, sourceId, B2CExceptionUtils.toMap( e )
 			);
 			return false;
 		}
@@ -110,29 +112,20 @@ public class EfsFileProcessor {
 	/**
 	 * Extracts the asset descriptor from the path and asks the orphaning service whether it is a candidate for action
 	 * (i.e. it has no matching row in the DB).
-	 * <p>
-	 * A {@code false} result may mean either:
-	 * <ul>
-	 *   <li>the path did not match any known pattern (reported as {@code SKIPPED_UNRECOGNIZED_PATH}), or</li>
-	 *   <li>the asset is still referenced in the DB and therefore must be preserved (no report entry).</li>
-	 * </ul>
 	 */
 	private boolean isOrphanCandidate( String pathStr ) {
 		AssetDataDTO potentialAssetToRemove = dataExtractor.extractData( pathStr );
 
 		if ( potentialAssetToRemove == null ) {
-			// Unknown pattern: not necessarily a bug (DevOps may have included files we don't manage), but worth
-			// surfacing loudly so someone reviews the report and either extends PathDataExtractor or fixes the input.
 			log.warn( "Path not recognised by any known pattern — skipping | path={}", pathStr );
 			return false;
 		}
 
-		log.trace( "Extracted asset data | path={} | asset={}", pathStr, potentialAssetToRemove );
+		log.trace( "Extracted asset data successfully | path={} | asset={}", pathStr, potentialAssetToRemove );
 
 		boolean orphan = orphaningService.isOrphan( potentialAssetToRemove );
 		if ( !orphan ) {
-			// Not orphan → still referenced in DB → do nothing and do not pollute the report.
-			log.debug( "Asset still referenced in DB — keeping file | path={}", pathStr );
+			log.trace( "Asset still referenced in DB — keeping file | path={}", pathStr );
 		}
 		return orphan;
 	}

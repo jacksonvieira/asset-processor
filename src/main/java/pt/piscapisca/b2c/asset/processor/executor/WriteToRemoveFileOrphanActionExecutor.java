@@ -2,6 +2,7 @@ package pt.piscapisca.b2c.asset.processor.executor;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.piscapisca.b2c.asset.processor.dto.DevAssetGarbageCollectionCommand.OrphanAction;
+import pt.piscapisca.b2c.utils.B2CExceptionUtils;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -47,11 +48,11 @@ public class WriteToRemoveFileOrphanActionExecutor implements OrphanActionExecut
 					writer.newLine();
 				}
 
-				log.debug( "Wrote line to remove file | line={} | target={}", rawLine, removeFilePath );
+				log.info( "Successfully wrote line to remove file | target={}", removeFilePath );
 				return OrphanActionOutcome.success( STATUS_WRITTEN + ":" + removeFilePath.getFileName() );
 			}
 			catch ( IOException e ) {
-				log.error( "Failed to process remove action for line | line={} | {}", rawLine, e.getMessage() );
+				log.error( "Failed to process remove action for line | {}", B2CExceptionUtils.toMap( e ) );
 				return OrphanActionOutcome.failure( STATUS_ERROR_IO + e.getMessage() );
 			}
 		}
