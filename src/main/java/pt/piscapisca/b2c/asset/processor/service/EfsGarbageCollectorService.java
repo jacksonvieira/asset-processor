@@ -3,7 +3,6 @@ package pt.piscapisca.b2c.asset.processor.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
-import org.springframework.scheduling.concurrent.CustomizableThreadFactory;
 import pt.piscapisca.b2c.asset.processor.domain.model.S3LogFile;
 import pt.piscapisca.b2c.asset.processor.domain.source.LogFileSource;
 import pt.piscapisca.b2c.asset.processor.dto.DevAssetGarbageCollectionCommand;
@@ -172,7 +171,7 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 
 		ExecutorService pool = Executors.newFixedThreadPool(
 				parallelFiles,
-				new CustomizableThreadFactory( "efs-gc-file-" )
+				Thread.ofPlatform().name( "efs-gc-file-", 0 ).factory()
 		);
 
 		try {
