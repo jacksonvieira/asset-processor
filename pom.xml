@@ -126,10 +126,6 @@
                     <artifactId>spring-rabbit</artifactId>
                 </exclusion>
                 <exclusion>
-                    <groupId>org.zalando</groupId>
-                    <artifactId>problem-spring-web</artifactId>
-                </exclusion>
-                <exclusion>
                     <groupId>pt.credibom.commons</groupId>
                     <artifactId>crb-logger</artifactId>
                 </exclusion>

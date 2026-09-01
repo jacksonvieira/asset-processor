@@ -72,12 +72,24 @@
     </snapshotRepository>
   </distributionManagement>
   <properties>
-    <jackson.module.jakarta.version>2.19.2</jackson.module.jakarta.version>
-    <maven.compiler.source>21</maven.compiler.source>
-    <maven.compiler.target>21</maven.compiler.target>
-    <picocli.version>4.7.6</picocli.version>
-    <amazon.awssdk.version>2.53.1</amazon.awssdk.version>
+    <hibernate.validator.version>8.0.0.Final</hibernate.validator.version>
+    <aws.apache.client.version>2.54.7</aws.apache.client.version>
+    <jackson.version>2.22.2</jackson.version>
+    <picocli.version>4.7.7</picocli.version>
+    <slf4j.version>2.0.18</slf4j.version>
+    <amazon.awssdk.version>2.54.7</amazon.awssdk.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <commons.utils.version>0.7.61</commons.utils.version>
+    <aws.sso.version>2.54.7</aws.sso.version>
+    <logback.version>1.6.3</logback.version>
+    <dotenv.version>3.2.0</dotenv.version>
+    <caffeine.version>3.2.4</caffeine.version>
+    <jooq.version>3.21.7</jooq.version>
+    <hikaricp.version>7.1.0</hikaricp.version>
+    <jackson.module.jakarta.version>2.22.2</jackson.module.jakarta.version>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
+    <jakarta.validation.version>3.1.1</jakarta.validation.version>
+    <postgresql.version>42.7.13</postgresql.version>
   </properties>
 </project>
