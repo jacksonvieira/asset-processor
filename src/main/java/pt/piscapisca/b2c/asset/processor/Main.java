@@ -1,6 +1,5 @@
 package pt.piscapisca.b2c.asset.processor;
 
-import io.github.cdimascio.dotenv.Dotenv;
 import lombok.extern.slf4j.Slf4j;
 import org.jooq.DSLContext;
 import picocli.CommandLine;
@@ -22,9 +21,6 @@ public class Main implements Runnable {
 
 	@Override
 	public void run() {
-		Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
-		dotenv.entries().forEach( entry -> System.setProperty( entry.getKey(), entry.getValue() ) );
-
 		command.validate();
 		log.info( "Starting processing with scope={}", command.scope() );
 
