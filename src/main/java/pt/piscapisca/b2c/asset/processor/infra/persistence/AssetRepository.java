@@ -186,7 +186,7 @@ public class AssetRepository {
 	 */
 	private Field<String> getAssetField( boolean isThumbnail ) {
 		String columnName = isThumbnail ? "thumbnail" : "filename";
-		return field( columnName, String.class );
+		return field( ENGINE_ASSET + "." + columnName, String.class );
 	}
 
 	/**
