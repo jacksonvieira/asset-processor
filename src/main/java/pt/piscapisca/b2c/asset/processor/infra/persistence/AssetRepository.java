@@ -225,8 +225,8 @@ public class AssetRepository {
 			return false;
 		}
 
-		Field<Object> jsonField = field( jsonColumnName, Object.class );
-		Field<Integer> entityIdField = field( entityIdColumnName, Integer.class );
+		Field<Object> jsonField = field( tableName + "." + jsonColumnName, Object.class );
+		Field<Integer> entityIdField = field( tableName + "." + entityIdColumnName, Integer.class );
 
 		Field<Integer> assetId = jsonIdAsInt( jsonField );
 		Field<String> assetField = getAssetField( isThumbnail );
