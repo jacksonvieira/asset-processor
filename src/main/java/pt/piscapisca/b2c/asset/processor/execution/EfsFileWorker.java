@@ -163,8 +163,8 @@ public class EfsFileWorker {
 		}
 
 		long count = processedCount.incrementAndGet();
-		if ( count % 10000 == 0 ) {
-			log.info( "Processing progress update | sourceId={} | processedFiles={} | queueSize={}",
+		if ( count % 100000 == 0 ) {
+			log.debug( "Processing progress update | sourceId={} | processedFiles={} | queueSize={}",
 					currentSourceId, count, executor.getQueue().size()
 			);
 		}

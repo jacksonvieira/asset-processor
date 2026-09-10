@@ -19,6 +19,8 @@ public class WriteToRemoveFileOrphanActionExecutor implements OrphanActionExecut
 
 	private static final String STATUS_ERROR_IO = "ERROR_IO: ";
 
+	private static final String OUTPUT_DIR_NAME = "orphan_removal_reports";
+
 	@Override
 	public OrphanAction supports() {
 		return OrphanAction.WRITE_TO_REMOVE_FILE;
@@ -36,19 +38,22 @@ public class WriteToRemoveFileOrphanActionExecutor implements OrphanActionExecut
 				Path parentDir = originalLogFile.getParent();
 				String originalFileName = originalLogFile.getFileName().toString();
 
-				// 1. Caminho do arquivo de remoção
-				String removeFileName = originalFileName.replace( ".txt", "_to_remove.txt" );
-				Path removeFilePath =
-						parentDir != null ? parentDir.resolve( removeFileName ) : Paths.get( removeFileName );
+				// 1. Cria um diretório dedicado e organizado no mesmo nível para os relatórios
+				Path reportsDir = parentDir != null ? parentDir.resolve( OUTPUT_DIR_NAME ) : Paths.get( OUTPUT_DIR_NAME );
+				Files.createDirectories( reportsDir );
 
-				// 2. Escreve a linha no arquivo _to_remove.txt de forma segura (apenas append)
+				// 2. Caminho do arquivo de remoção dentro do novo diretório
+				String removeFileName = originalFileName.replace( ".txt", "_to_remove.txt" );
+				Path removeFilePath = reportsDir.resolve( removeFileName );
+
+				// 3. Escreve a linha no arquivo _to_remove.txt de forma segura (apenas append)
 				try ( BufferedWriter writer = Files.newBufferedWriter( removeFilePath, StandardCharsets.UTF_8,
 						StandardOpenOption.CREATE, StandardOpenOption.APPEND ) ) {
 					writer.write( rawLine );
 					writer.newLine();
 				}
 
-				log.info( "Successfully wrote line to remove file | target={}", removeFilePath );
+				log.debug( "Successfully wrote line to remove file | target={}", removeFilePath );
 				return OrphanActionOutcome.success( STATUS_WRITTEN + ":" + removeFilePath.getFileName() );
 			}
 			catch ( IOException e ) {

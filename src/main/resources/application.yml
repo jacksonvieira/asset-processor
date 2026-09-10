@@ -41,11 +41,11 @@ b2c:
         quarantine-path: ${ASSET_LOCATION_PATH}${QUARANTINE_FOLDER}
 
         # Paralelismo de arquivos S3 (quando command.mode=PARALLEL_FILES)
-        default-parallel-files: 2
-        max-parallel-files: 3
+        default-parallel-files: ${DEFAULT_PARALLEL_FILES:2}
+        max-parallel-files: ${MAX_PARALLEL_FILES:3}
 
         # Threads internas por arquivo (dentro do EfsFileWorker)
-        worker-threads: 64
+        worker-threads: ${WORKER_THREADS:64}
 
         s3:
           bucket: ${S3_BUCKET_NAME}

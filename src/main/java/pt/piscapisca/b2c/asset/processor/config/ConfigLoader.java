@@ -59,6 +59,14 @@ public class ConfigLoader {
 	}
 
 	private static String resolveConfigurationValue( String key, Dotenv dotenv ) {
+		// Suporta fallback no formato ${VAR_NAME:defaultValue}
+		String defaultValue = null;
+		if ( key.contains( ":" ) ) {
+			String[] parts = key.split( ":", 2 );
+			key = parts[0];
+			defaultValue = parts[1];
+		}
+
 		// 1. Prioridade máxima: Parâmetro via linha de comando (-Dkey=value)
 		String value = System.getProperty( key );
 
@@ -72,6 +80,7 @@ public class ConfigLoader {
 			value = System.getenv( key );
 		}
 
-		return value;
+		// 4. Retorna o valor encontrado ou o fallback padrão definido no YAML
+		return value != null ? value : defaultValue;
 	}
 }

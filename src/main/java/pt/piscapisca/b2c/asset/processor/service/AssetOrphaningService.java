@@ -99,7 +99,7 @@ public class AssetOrphaningService {
 
 		// 1. Check if the Parent Vehicle exists and is active. If not, the asset is an orphan.
 		if ( !assetLookupCacheService.vehicleExists( vehicleId ) ) {
-			log.info( "Vehicle ID not found or inactive, asset is an EFS orphan | vehicleId={}", vehicleId );
+			log.debug( "Vehicle ID not found or inactive, asset is an EFS orphan | vehicleId={}", vehicleId );
 			return true;
 		}
 
@@ -111,7 +111,7 @@ public class AssetOrphaningService {
 		}
 
 		// 3. The Parent Vehicle exists, but the image is not linked (it was removed from the Vehicle's asset list in the DB).
-		log.info(
+		log.debug(
 				"Asset is not referenced by active Vehicle ID, it is an EFS orphan | vehicleId={}", vehicleId );
 		return true; // IS an orphan
 	}
@@ -126,14 +126,14 @@ public class AssetOrphaningService {
 		log.debug( "Validating asset against Stand ID | standId={}", standId );
 
 		if ( !assetLookupCacheService.standExists( standId ) ) {
-			log.info( "Stand ID not found or inactive, asset is an EFS orphan | standId={}", standId );
+			log.debug( "Stand ID not found or inactive, asset is an EFS orphan | standId={}", standId );
 			return true;
 		}
 		if ( assetRepository.existsStandAssetByStandId( searchFileName, standId, isThumbnailColumnSearch ) ) {
 			log.debug( "Stand asset is referenced by Stand ID, skipping deletion | standId={}", standId );
 			return false;
 		}
-		log.info( "Stand asset is not referenced by Stand ID, it is an EFS orphan | standId={}", standId );
+		log.debug( "Stand asset is not referenced by Stand ID, it is an EFS orphan | standId={}", standId );
 		return true;
 	}
 
@@ -147,7 +147,7 @@ public class AssetOrphaningService {
 		log.debug( "Validating asset against Company ID | companyId={}", companyId );
 
 		if ( !assetLookupCacheService.companyExists( companyId ) ) {
-			log.info( "Company ID not found or inactive, asset is an EFS orphan | companyId={}", companyId );
+			log.debug( "Company ID not found or inactive, asset is an EFS orphan | companyId={}", companyId );
 			return true;
 		}
 
@@ -162,7 +162,7 @@ public class AssetOrphaningService {
 			return false;
 		}
 
-		log.info( "Company asset is not referenced by Company ID, it is an EFS orphan | companyId={}", companyId );
+		log.debug( "Company asset is not referenced by Company ID, it is an EFS orphan | companyId={}", companyId );
 		return true;
 	}
 
@@ -181,7 +181,7 @@ public class AssetOrphaningService {
 
 		// 1. Check if the Parent Vehicle exists and is active. If not, the asset is an orphan.
 		if ( !assetLookupCacheService.vehicleExists( vehicleUuid ) ) {
-			log.info( "Vehicle UUID not found or inactive, asset is an EFS orphan | vehicleUuid={}", vehicleUuid );
+			log.debug( "Vehicle UUID not found or inactive, asset is an EFS orphan | vehicleUuid={}", vehicleUuid );
 			return true;
 		}
 
@@ -194,7 +194,7 @@ public class AssetOrphaningService {
 		}
 
 		// 3. The Parent Vehicle exists, but the image is not linked (it was removed from the Vehicle's asset list in the DB).
-		log.info(
+		log.debug(
 				"Asset is not referenced by active Vehicle UUID, it is an EFS orphan | vehicleUuid={}", vehicleUuid
 		);
 		return true; // IS an orphan
@@ -216,7 +216,7 @@ public class AssetOrphaningService {
 
 		// 1. Person must exist first. If not, the entire branch (incl. vehicles under it) is orphan.
 		if ( !assetLookupCacheService.personExists( personId ) ) {
-			log.info( "Person ID not found or inactive, asset is an EFS orphan | personId={}", personId );
+			log.debug( "Person ID not found or inactive, asset is an EFS orphan | personId={}", personId );
 			return true;
 		}
 
@@ -228,7 +228,7 @@ public class AssetOrphaningService {
 
 			Integer vehicleId = candidateAsset.getVehicleId().loadId();
 			if ( !assetLookupCacheService.vehicleBelongsToPerson( vehicleId, personId ) ) {
-				log.info(
+				log.debug(
 						"Vehicle ID no longer belongs to Person ID, asset is an EFS orphan | vehicleId={} | personId={}",
 						vehicleId, personId
 				);
@@ -242,7 +242,7 @@ public class AssetOrphaningService {
 			String vehicleUuid = candidateAsset.getVehicleUuid();
 
 			if ( !assetLookupCacheService.vehicleBelongsToPerson( vehicleUuid, personId ) ) {
-				log.info(
+				log.debug(
 						"Vehicle UUID no longer belongs to Person ID, asset is an EFS orphan | vehicleUuid={} | personId={}",
 						vehicleUuid, personId
 				);

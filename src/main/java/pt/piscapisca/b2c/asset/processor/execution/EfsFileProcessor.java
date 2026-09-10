@@ -89,7 +89,7 @@ public class EfsFileProcessor {
 			}
 
 			if ( outcome.success() ) {
-				log.info( "Successfully applied action on orphan file | action={} | path={} | status={}",
+				log.debug( "Successfully applied action on orphan file | action={} | path={} | status={}",
 						orphanAction, normalizedPath, outcome.reportStatus()
 				);
 			}

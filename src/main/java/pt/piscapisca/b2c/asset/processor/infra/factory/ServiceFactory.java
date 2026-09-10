@@ -1,5 +1,6 @@
 package pt.piscapisca.b2c.asset.processor.infra.factory;
 
+import lombok.extern.slf4j.Slf4j;
 import org.jooq.DSLContext;
 import pt.piscapisca.b2c.asset.processor.config.AppConfig;
 import pt.piscapisca.b2c.asset.processor.domain.source.LogFileSource;
@@ -22,6 +23,7 @@ import java.util.List;
  * Factory responsible for wiring and instantiating the main garbage collection service
  * along with all its required infrastructure components, repositories, and executors.
  */
+@Slf4j
 public class ServiceFactory {
 
 	/**
@@ -38,6 +40,9 @@ public class ServiceFactory {
 	) {
 		var gcConfig = config.b2c().companies().efs().garbageCollector();
 
+		log.error( "defaultParallelFiles  -----> {}",  gcConfig.defaultParallelFiles());
+		log.error( "maxParallelFiles  -----> {}",  gcConfig.maxParallelFiles());
+		log.error( "workerThreads  -----> {}",  gcConfig.workerThreads());
 		EfsGarbageCollectorProperties gcProperties = new EfsGarbageCollectorProperties(
 				gcConfig.quarantinePath(),
 				gcConfig.defaultParallelFiles(),
