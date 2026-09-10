@@ -165,7 +165,7 @@ public class EfsFileWorker {
 			deletedBytes.addAndGet( fileSize );
 
 			long count = deletedCount.incrementAndGet();
-			if ( dryRun && count % 1000 == 0 ) {
+			if ( dryRun && count % 100000 == 0 ) {
 				log.info( "[DRY-RUN] Files matched for action so far | count={} | sourceId={}", count, currentSourceId );
 			}
 		}

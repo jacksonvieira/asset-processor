@@ -67,7 +67,7 @@ public class EfsFileProcessor implements AutoCloseable {
 			}
 
 			if ( dryRun ) {
-				log.info( "[DRY-RUN] Would apply action on orphan path | action={} | path={}", orphanAction,
+				log.debug( "[DRY-RUN] Would apply action on orphan path | action={} | path={}", orphanAction,
 						normalizedPath );
 				return true;
 			}
