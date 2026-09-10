@@ -40,14 +40,15 @@ public class ServiceFactory {
 	) {
 		var gcConfig = config.b2c().companies().efs().garbageCollector();
 
-		log.error( "defaultParallelFiles  -----> {}",  gcConfig.defaultParallelFiles());
-		log.error( "maxParallelFiles  -----> {}",  gcConfig.maxParallelFiles());
-		log.error( "workerThreads  -----> {}",  gcConfig.workerThreads());
+		log.info( "EFS GC config | defaultParallelFiles={} | maxParallelFiles={} | workerThreads={} | maximumPoolSize={}",
+				gcConfig.defaultParallelFiles(), gcConfig.maxParallelFiles(), gcConfig.workerThreads(),
+				config.database().maximumPoolSize() );
 		EfsGarbageCollectorProperties gcProperties = new EfsGarbageCollectorProperties(
 				gcConfig.quarantinePath(),
 				gcConfig.defaultParallelFiles(),
 				gcConfig.maxParallelFiles(),
-				gcConfig.workerThreads()
+				gcConfig.workerThreads(),
+				config.database().maximumPoolSize()
 		);
 
 		LogFileSource logFileSource;
@@ -76,7 +77,7 @@ public class ServiceFactory {
 		}
 
 		AssetLookupCacheService lookupCacheService = createAssetLookupCacheService( dsl );
-		EfsFileProcessor efsFileProcessor = createEfsFileProcessor( dsl, lookupCacheService, gcProperties );
+		EfsFileProcessor efsFileProcessor = createEfsFileProcessor( lookupCacheService, gcProperties );
 
 		return new EfsGarbageCollectorService(
 				gcProperties,
@@ -90,18 +91,15 @@ public class ServiceFactory {
 	 * Instantiates and configures the {@link EfsFileProcessor} with its required data extractors,
 	 * orphaning services, and action executors registry.
 	 *
-	 * @param dsl                the jOOQ database context
 	 * @param lookupCacheService the asset cache service for fast validation
 	 * @param gcProperties       garbage collection runtime properties
 	 * @return a configured {@link EfsFileProcessor} instance
 	 */
 	private static EfsFileProcessor createEfsFileProcessor(
-			DSLContext dsl,
 			AssetLookupCacheService lookupCacheService,
 			EfsGarbageCollectorProperties gcProperties
 	) {
-		AssetRepository assetRepository = new AssetRepository( dsl );
-		AssetOrphaningService orphaningService = new AssetOrphaningService( lookupCacheService, assetRepository );
+		AssetOrphaningService orphaningService = new AssetOrphaningService( lookupCacheService );
 		PathDataExtractor dataExtractor = new PathDataExtractor();
 
 		DeleteOrphanActionExecutor deleteExecutor = new DeleteOrphanActionExecutor();
@@ -126,7 +124,8 @@ public class ServiceFactory {
 				new VehicleRepository( dsl ),
 				new StandRepository( dsl ),
 				new PersonRepository( dsl ),
-				new CompanyRepository( dsl )
+				new CompanyRepository( dsl ),
+				new AssetRepository( dsl )
 		);
 	}
 }

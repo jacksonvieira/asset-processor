@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import pt.piscapisca.b2c.asset.processor.infra.persistence.AssetRepository;
 import pt.piscapisca.b2c.asset.processor.infra.persistence.CompanyRepository;
 import pt.piscapisca.b2c.asset.processor.infra.persistence.PersonRepository;
 import pt.piscapisca.b2c.asset.processor.infra.persistence.StandRepository;
@@ -27,6 +28,8 @@ public class AssetLookupCacheService {
 
 	private final CompanyRepository companyRepository;
 
+	private final AssetRepository assetRepository;
+
 	private final Cache<Integer, Boolean> vehicleExistenceCache = Caffeine.newBuilder()
 			.maximumSize( 10_000 )
 			.expireAfterWrite( Duration.ofMinutes( 15 ) )
@@ -48,6 +51,31 @@ public class AssetLookupCacheService {
 			.build();
 
 	private final Cache<Integer, Boolean> personExistenceCache = Caffeine.newBuilder()
+			.maximumSize( 10_000 )
+			.expireAfterWrite( Duration.ofMinutes( 15 ) )
+			.build();
+
+	private final Cache<Integer, AssetRepository.AssetNames> vehicleAssetNamesByIdCache = Caffeine.newBuilder()
+			.maximumSize( 10_000 )
+			.expireAfterWrite( Duration.ofMinutes( 15 ) )
+			.build();
+
+	private final Cache<String, AssetRepository.AssetNames> vehicleAssetNamesByUuidCache = Caffeine.newBuilder()
+			.maximumSize( 10_000 )
+			.expireAfterWrite( Duration.ofMinutes( 15 ) )
+			.build();
+
+	private final Cache<Integer, AssetRepository.AssetNames> standAssetNamesCache = Caffeine.newBuilder()
+			.maximumSize( 5_000 )
+			.expireAfterWrite( Duration.ofMinutes( 15 ) )
+			.build();
+
+	private final Cache<Integer, AssetRepository.AssetNames> companyAssetNamesCache = Caffeine.newBuilder()
+			.maximumSize( 5_000 )
+			.expireAfterWrite( Duration.ofMinutes( 15 ) )
+			.build();
+
+	private final Cache<Integer, AssetRepository.AssetNames> personAssetNamesCache = Caffeine.newBuilder()
 			.maximumSize( 10_000 )
 			.expireAfterWrite( Duration.ofMinutes( 15 ) )
 			.build();
@@ -139,6 +167,68 @@ public class AssetLookupCacheService {
 	}
 
 	/**
+	 * Checks (cache-backed) whether the given file is linked to an active vehicle asset by vehicle ID.
+	 * The full set of linked names is loaded once per vehicle and reused for subsequent lines,
+	 * replacing the previous one-EXISTS-query-per-line pattern.
+	 */
+	public boolean vehicleAssetLinked( Integer vehicleId, String fileName, boolean isThumbnail ) {
+		if ( vehicleId == null || fileName == null || fileName.isBlank() ) {
+			return false;
+		}
+		return vehicleAssetNamesByIdCache
+				.get( vehicleId, assetRepository::loadActiveVehicleAssetNamesByVehicleId )
+				.contains( fileName, isThumbnail );
+	}
+
+	/**
+	 * Checks (cache-backed) whether the given file is linked to an active vehicle asset by vehicle UUID.
+	 */
+	public boolean vehicleAssetLinked( String vehicleUuid, String fileName, boolean isThumbnail ) {
+		if ( vehicleUuid == null || vehicleUuid.isBlank() || fileName == null || fileName.isBlank() ) {
+			return false;
+		}
+		return vehicleAssetNamesByUuidCache
+				.get( vehicleUuid, assetRepository::loadActiveVehicleAssetNamesByVehicleUuid )
+				.contains( fileName, isThumbnail );
+	}
+
+	/**
+	 * Checks (cache-backed) whether the given file is linked to a stand asset by stand ID.
+	 */
+	public boolean standAssetLinked( Integer standId, String fileName, boolean isThumbnail ) {
+		if ( standId == null || fileName == null || fileName.isBlank() ) {
+			return false;
+		}
+		return standAssetNamesCache
+				.get( standId, assetRepository::loadStandAssetNamesByStandId )
+				.contains( fileName, isThumbnail );
+	}
+
+	/**
+	 * Checks (cache-backed) whether the given file is linked to a company logo/logo_type asset by company ID.
+	 */
+	public boolean companyAssetLinked( Integer companyId, String fileName, boolean isThumbnail ) {
+		if ( companyId == null || fileName == null || fileName.isBlank() ) {
+			return false;
+		}
+		return companyAssetNamesCache
+				.get( companyId, assetRepository::loadCompanyAssetNames )
+				.contains( fileName, isThumbnail );
+	}
+
+	/**
+	 * Checks (cache-backed) whether the given file is linked to a person profile asset by person ID.
+	 */
+	public boolean personProfileAssetLinked( Integer personId, String fileName, boolean isThumbnail ) {
+		if ( personId == null || fileName == null || fileName.isBlank() ) {
+			return false;
+		}
+		return personAssetNamesCache
+				.get( personId, assetRepository::loadPersonProfileAssetNames )
+				.contains( fileName, isThumbnail );
+	}
+
+	/**
 	 * Clears all lookup and existence caches.
 	 */
 	public void clearLookupCaches() {
@@ -149,6 +239,11 @@ public class AssetLookupCacheService {
 		personExistenceCache.invalidateAll();
 		vehicleOwnedByPersonCache.invalidateAll();
 		vehicleOwnedByPersonUuidCache.invalidateAll();
+		vehicleAssetNamesByIdCache.invalidateAll();
+		vehicleAssetNamesByUuidCache.invalidateAll();
+		standAssetNamesCache.invalidateAll();
+		companyAssetNamesCache.invalidateAll();
+		personAssetNamesCache.invalidateAll();
 		log.info( "EFS GC lookup caches cleared." );
 	}
 }

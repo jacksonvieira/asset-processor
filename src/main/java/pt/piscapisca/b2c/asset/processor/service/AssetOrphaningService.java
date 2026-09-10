@@ -3,7 +3,6 @@ package pt.piscapisca.b2c.asset.processor.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import pt.piscapisca.b2c.asset.processor.dto.AssetDataDTO;
-import pt.piscapisca.b2c.asset.processor.infra.persistence.AssetRepository;
 
 /**
  * Service responsible for identifying orphan assets stored in EFS.
@@ -15,8 +14,6 @@ import pt.piscapisca.b2c.asset.processor.infra.persistence.AssetRepository;
 public class AssetOrphaningService {
 
 	private final AssetLookupCacheService assetLookupCacheService;
-
-	private final AssetRepository assetRepository;
 
 	/**
 	 * Determines if a potential asset file found in the EFS should be considered an orphan.
@@ -104,8 +101,8 @@ public class AssetOrphaningService {
 		}
 
 		// 2. The Parent Vehicle exists. Is the Asset linked to it?
-		if ( assetRepository.existsActiveVehicleAssetByVehicleId(
-				searchFileName, vehicleId, isThumbnailColumnSearch ) ) {
+		if ( assetLookupCacheService.vehicleAssetLinked(
+				vehicleId, searchFileName, isThumbnailColumnSearch ) ) {
 			log.debug( "Asset is actively referenced by Vehicle ID, skipping deletion | vehicleId={}", vehicleId );
 			return false; // NOT an orphan
 		}
@@ -129,7 +126,7 @@ public class AssetOrphaningService {
 			log.debug( "Stand ID not found or inactive, asset is an EFS orphan | standId={}", standId );
 			return true;
 		}
-		if ( assetRepository.existsStandAssetByStandId( searchFileName, standId, isThumbnailColumnSearch ) ) {
+		if ( assetLookupCacheService.standAssetLinked( standId, searchFileName, isThumbnailColumnSearch ) ) {
 			log.debug( "Stand asset is referenced by Stand ID, skipping deletion | standId={}", standId );
 			return false;
 		}
@@ -151,14 +148,8 @@ public class AssetOrphaningService {
 			return true;
 		}
 
-		if ( assetRepository.existsCompanyLogoAsset( companyId, searchFileName, isThumbnailColumnSearch ) ) {
-			log.debug( "Company asset logo is referenced by Company ID, skipping deletion | companyId={}", companyId );
-			return false;
-		}
-
-		if ( assetRepository.existsCompanyLogoTypeAsset( companyId, searchFileName, isThumbnailColumnSearch ) ) {
-			log.debug( "Company asset logo type is referenced by Company ID, skipping deletion | companyId={}",
-					companyId );
+		if ( assetLookupCacheService.companyAssetLinked( companyId, searchFileName, isThumbnailColumnSearch ) ) {
+			log.debug( "Company asset is referenced by Company ID, skipping deletion | companyId={}", companyId );
 			return false;
 		}
 
@@ -186,8 +177,8 @@ public class AssetOrphaningService {
 		}
 
 		// 2. The Parent Vehicle exists. Is the Asset linked to it?
-		if ( assetRepository.existsActiveVehicleAssetByVehicleUuid(
-				searchFileName, vehicleUuid, isThumbnailColumnSearch ) ) {
+		if ( assetLookupCacheService.vehicleAssetLinked(
+				vehicleUuid, searchFileName, isThumbnailColumnSearch ) ) {
 			log.debug( "Asset is actively referenced by Vehicle UUID, skipping deletion | vehicleUuid={}",
 					vehicleUuid );
 			return false; // NOT an orphan
@@ -263,7 +254,7 @@ public class AssetOrphaningService {
 
 		log.debug( "Validating asset against Person ID | personId={}", personId );
 
-		if ( assetRepository.existsPersonProfileAsset( personId, searchFileName, isThumbnailColumnSearch ) ) {
+		if ( assetLookupCacheService.personProfileAssetLinked( personId, searchFileName, isThumbnailColumnSearch ) ) {
 			log.debug( "Person profile is referenced by Person ID, skipping deletion | personId={}", personId );
 			return false;
 		}

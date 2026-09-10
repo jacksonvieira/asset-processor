@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * construction time — safe for concurrent access from every {@link EfsFileWorker} thread.
  */
 @Slf4j
-public class OrphanActionExecutorRegistry {
+public class OrphanActionExecutorRegistry implements AutoCloseable {
 
 	private final Map<OrphanAction, OrphanActionExecutor> executors;
 
@@ -73,5 +73,30 @@ public class OrphanActionExecutorRegistry {
 			) );
 		}
 		return exec;
+	}
+
+	/**
+	 * Returns the executor bound to {@code action}, or {@code null} if none is registered. Unlike
+	 * {@link #get(OrphanAction)} this never throws, so callers can perform optional lifecycle work.
+	 */
+	public OrphanActionExecutor find( OrphanAction action ) {
+		return executors.get( action );
+	}
+
+	/**
+	 * Closes every registered executor that holds resources ({@link AutoCloseable}). Called once at the end of a run.
+	 */
+	@Override
+	public void close() {
+		for ( OrphanActionExecutor exec : executors.values() ) {
+			if ( exec instanceof AutoCloseable closeable ) {
+				try {
+					closeable.close();
+				}
+				catch ( Exception e ) {
+					log.warn( "Failed to close executor {} | {}", exec.getClass().getName(), e.getMessage() );
+				}
+			}
+		}
 	}
 }

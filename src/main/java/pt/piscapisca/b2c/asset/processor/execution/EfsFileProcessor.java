@@ -38,7 +38,7 @@ import java.nio.file.Paths;
  */
 @Slf4j
 @RequiredArgsConstructor
-public class EfsFileProcessor {
+public class EfsFileProcessor implements AutoCloseable {
 
 	private final PathDataExtractor dataExtractor;
 
@@ -128,5 +128,27 @@ public class EfsFileProcessor {
 			log.trace( "Asset still referenced in DB — keeping file | path={}", pathStr );
 		}
 		return orphan;
+	}
+
+	/**
+	 * Releases the {@code *_to_remove.txt} writer associated with a finished source file (WRITE_TO_REMOVE mode only).
+	 * No-op for other actions. Frees the file handle promptly so long runs do not accumulate open descriptors.
+	 */
+	public void closeRemoveWriterFor( String sourceId ) {
+		if ( sourceId == null ) {
+			return;
+		}
+		OrphanActionExecutor exec = executorRegistry.find( OrphanAction.WRITE_TO_REMOVE_FILE );
+		if ( exec instanceof WriteToRemoveFileOrphanActionExecutor removeExecutor ) {
+			removeExecutor.closeWriterFor( Paths.get( sourceId ) );
+		}
+	}
+
+	/**
+	 * Closes any resource-holding executors at the end of a run.
+	 */
+	@Override
+	public void close() {
+		executorRegistry.close();
 	}
 }
