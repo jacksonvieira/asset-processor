@@ -140,3 +140,85 @@ java -jar target/asset-processor.jar \
   --mode=SEQUENTIAL \
   --orphan-action=WRITE_TO_REMOVE_FILE
 ```
+
+
+---
+
+## ⚡ Afinação de Desempenho e Recomendações de Base de Dados
+
+Esta secção documenta como dimensionar a concorrência e que índices criar na base de
+dados. **As recomendações de índices são apenas documentação** — nenhum DDL é executado
+pela aplicação; a criação dos índices deve ser feita/validada pela equipa de base de dados.
+
+### Concorrência vs. pool de ligações (regra fundamental)
+
+O número de threads de trabalho por arquivo (`worker-threads`) nunca deve exceder o
+tamanho do pool de ligações HikariCP (`database.maximum-pool-size`). Cada thread que faz
+uma consulta pede uma ligação ao pool; se as threads forem mais do que as ligações
+disponíveis, as consultas ficam em fila e acabam por dar *timeout*.
+
+> A aplicação valida esta regra no arranque (`EfsGarbageCollectorProperties`). Se
+> `worker-threads > maximum-pool-size`, o arranque **falha imediatamente** com uma
+> mensagem clara, em vez de degradar em tempo de execução.
+
+Fórmula do pico aproximado de ligações em uso:
+
+```text
+SEQUENTIAL      : ligações ≈ worker-threads
+PARALLEL_FILES  : ligações ≈ parallel-files × worker-threads
+```
+
+Mantenha sempre esse pico `<= maximum-pool-size`. Exemplos com `maximum-pool-size=50`:
+
+| Modo | parallel-files | worker-threads | Pico aprox. | OK? |
+| :--- | :---: | :---: | :---: | :---: |
+| SEQUENTIAL | — | 16 | 16 | ✅ |
+| PARALLEL_FILES | 3 | 16 | 48 | ✅ |
+| PARALLEL_FILES | 3 | 64 | 192 | ❌ (esgota o pool) |
+
+Os *defaults* foram reduzidos (`worker-threads=16`) para funcionar de forma estável no
+bastion com recursos limitados. Todos os valores são configuráveis por variável de
+ambiente: `WORKER_THREADS`, `DEFAULT_PARALLEL_FILES`, `MAX_PARALLEL_FILES`,
+`DB_MAX_POOL_SIZE`.
+
+### Índices recomendados (PostgreSQL)
+
+As verificações de órfãos passaram a carregar, **uma única vez por entidade**, o conjunto
+de nomes de assets associados (eliminando o padrão N+1 de uma consulta `EXISTS` por
+linha). Para que esse carregamento por entidade seja rápido, recomendam-se os seguintes
+índices. Ajuste os nomes de tabelas/colunas ao *schema* real (`b2c`) e valide os planos
+de execução com `EXPLAIN ANALYZE` antes de aplicar em produção.
+
+```sql
+-- Junções asset <-> vehicle_asset <-> vehicle
+CREATE INDEX IF NOT EXISTS idx_vehicle_asset_vehicle_id ON b2c.vehicle_asset (vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_vehicle_asset_asset_id   ON b2c.vehicle_asset (asset_id);
+
+-- Filtro por veículo ativo (por id e por uuid)
+CREATE INDEX IF NOT EXISTS idx_vehicle_id_active   ON b2c.vehicle (id)    WHERE active IS TRUE;
+CREATE INDEX IF NOT EXISTS idx_vehicle_vuuid_active ON b2c.vehicle (vuuid) WHERE active IS TRUE;
+
+-- Junções asset <-> stand_asset
+CREATE INDEX IF NOT EXISTS idx_stand_asset_stand_id ON b2c.stand_asset (stand_id);
+CREATE INDEX IF NOT EXISTS idx_stand_asset_asset_id ON b2c.stand_asset (asset_id);
+
+-- Chave primária de asset é usada em todas as junções (normalmente já existe como PK)
+-- CREATE UNIQUE INDEX IF NOT EXISTS idx_asset_id ON b2c.asset (id);
+
+-- Pesquisa por nome de ficheiro / thumbnail no asset
+CREATE INDEX IF NOT EXISTS idx_asset_filename  ON b2c.asset (filename);
+CREATE INDEX IF NOT EXISTS idx_asset_thumbnail ON b2c.asset (thumbnail);
+
+-- Extração do id de asset a partir de colunas JSON (company.logo / company.logo_type / person.image_profile)
+-- Índices funcionais aceleram o filtro (json ->> 'id'):
+CREATE INDEX IF NOT EXISTS idx_company_logo_id
+    ON b2c.company ( ((logo ->> 'id')) ) WHERE logo IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_company_logo_type_id
+    ON b2c.company ( ((logo_type ->> 'id')) ) WHERE logo_type IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_person_image_profile_id
+    ON b2c.person ( ((image_profile ->> 'id')) ) WHERE image_profile IS NOT NULL;
+```
+
+> **Nota:** os índices acima são um ponto de partida baseado nas consultas atuais. A lista
+> definitiva deve ser validada com `EXPLAIN ANALYZE` sobre volumes reais, e alguns podem
+> já existir (por exemplo, chaves primárias e estrangeiras). Não crie índices redundantes.

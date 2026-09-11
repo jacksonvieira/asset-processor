@@ -8,14 +8,32 @@ import pt.piscapisca.b2c.utils.B2CExceptionUtils;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 public class EfsFileWorker {
 
-	private final ThreadPoolExecutor executor;
+	/**
+	 * Executor backed by one virtual thread per task (Java 21). Virtual threads are extremely cheap, so the number of
+	 * live tasks is bounded by {@link #permits} rather than by a fixed platform-thread pool. This keeps the memory
+	 * footprint tiny on the resource-limited bastion while still allowing high I/O concurrency.
+	 */
+	private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+	/**
+	 * Bounds the number of tasks that can be in flight at any moment. A permit is acquired before a line is submitted
+	 * (providing natural back-pressure on the reader thread) and released when the task finishes. The bound is sized to
+	 * stay within the DB connection pool so DB access never oversubscribes the pool.
+	 */
+	private final Semaphore permits;
+
+	private final int concurrency;
 
 	private final EfsPathFilter filter;
 
@@ -41,24 +59,6 @@ public class EfsFileWorker {
 
 	private String currentSourceId;
 
-	private record BlockingCallerRunsPolicy() implements RejectedExecutionHandler {
-
-		@Override
-		public void rejectedExecution( Runnable r, ThreadPoolExecutor executor ) {
-			if ( !executor.isShutdown() ) {
-				try {
-					if ( !executor.getQueue().offer( r, 1, TimeUnit.SECONDS ) ) {
-						r.run();
-					}
-				}
-				catch ( InterruptedException e ) {
-					Thread.currentThread().interrupt();
-					throw new RejectedExecutionException( "Interrupted while waiting for thread pool queue space", e );
-				}
-			}
-		}
-	}
-
 	public EfsFileWorker( int threads,
 			EfsPathFilter filter,
 			EfsFileProcessor processor,
@@ -66,14 +66,8 @@ public class EfsFileWorker {
 			OrphanAction orphanAction,
 			int executorTimeoutMinutes ) {
 
-		this.executor = new ThreadPoolExecutor(
-				threads,
-				threads,
-				0L,
-				TimeUnit.MILLISECONDS,
-				new LinkedBlockingQueue<>( 2000 ),
-				new BlockingCallerRunsPolicy()
-		);
+		this.concurrency = Math.max( 1, threads );
+		this.permits = new Semaphore( this.concurrency );
 
 		this.filter = filter;
 		this.processor = processor;
@@ -87,8 +81,8 @@ public class EfsFileWorker {
 		this.startTime = Instant.now();
 		this.currentSourceId = sourceId;
 		this.isShutdown.set( false );
-		log.info( "Starting processing worker for source | sourceId={} | dryRun={} | action={}",
-				sourceId, dryRun, orphanAction );
+		log.info( "Starting processing worker for source | sourceId={} | dryRun={} | action={} | concurrency={}",
+				sourceId, dryRun, orphanAction, concurrency );
 	}
 
 	public void processSingleLine( String line, String sourceId ) {
@@ -105,13 +99,26 @@ public class EfsFileWorker {
 
 	private void submitTask( String rawLine, String normalizedPath, String sourceId ) {
 		Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
+
+		// Back-pressure: block the reader thread until a permit is free, so at most `concurrency` tasks run at once.
+		try {
+			permits.acquire();
+		}
+		catch ( InterruptedException e ) {
+			Thread.currentThread().interrupt();
+			log.error( "Interrupted while acquiring worker permit | path={}", normalizedPath );
+			return;
+		}
+
 		try {
 			executor.submit( createProcessingTask( rawLine, normalizedPath, sourceId, mdcSnapshot ) );
 		}
 		catch ( RejectedExecutionException ex ) {
+			permits.release();
 			log.error( "Task rejected (executor shutting down) | path={}", normalizedPath );
 		}
 		catch ( Exception e ) {
+			permits.release();
 			log.error( "Unexpected error submitting task | path={} | {}", normalizedPath, B2CExceptionUtils.toMap( e ) );
 		}
 	}
@@ -132,6 +139,7 @@ public class EfsFileWorker {
 			}
 			finally {
 				MDC.clear();
+				permits.release();
 			}
 		};
 	}
@@ -157,16 +165,34 @@ public class EfsFileWorker {
 			deletedBytes.addAndGet( fileSize );
 
 			long count = deletedCount.incrementAndGet();
-			if ( dryRun && count % 1000 == 0 ) {
+			if ( dryRun && count % 100000 == 0 ) {
 				log.info( "[DRY-RUN] Files matched for action so far | count={} | sourceId={}", count, currentSourceId );
 			}
 		}
 
 		long count = processedCount.incrementAndGet();
 		if ( count % 100000 == 0 ) {
-			log.debug( "Processing progress update | sourceId={} | processedFiles={} | queueSize={}",
-					currentSourceId, count, executor.getQueue().size()
+			log.debug( "Processing progress update | sourceId={} | processedFiles={} | inFlight={}",
+					currentSourceId, count, ( concurrency - permits.availablePermits() )
 			);
+		}
+	}
+
+	/**
+	 * Blocks until every task submitted so far has finished executing.
+	 * <p>
+	 * Implemented by draining all permits (which are only released when a task completes) and then restoring them.
+	 * Callers use this to guarantee that a checkpoint reflects lines actually <b>completed</b>, not merely submitted —
+	 * preventing a resume from skipping orphans that were still being processed when the checkpoint was written.
+	 */
+	public void awaitInFlightCompletion() {
+		try {
+			permits.acquire( concurrency );
+			permits.release( concurrency );
+		}
+		catch ( InterruptedException e ) {
+			Thread.currentThread().interrupt();
+			log.warn( "Interrupted while waiting for in-flight tasks to complete | sourceId={}", currentSourceId );
 		}
 	}
 

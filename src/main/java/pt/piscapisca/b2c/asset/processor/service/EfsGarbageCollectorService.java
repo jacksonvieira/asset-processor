@@ -11,11 +11,15 @@ import pt.piscapisca.b2c.asset.processor.execution.EfsFileWorker;
 import pt.piscapisca.b2c.asset.processor.execution.EfsPathFilter;
 import pt.piscapisca.b2c.asset.processor.infra.EfsGarbageCollectorProperties;
 import pt.piscapisca.b2c.asset.processor.infra.checkpoint.FileCheckpointManager;
+import pt.piscapisca.b2c.asset.processor.infra.statistics.ProcessingStatisticsCollector;
 import pt.piscapisca.b2c.hashids.SecretId;
 import pt.piscapisca.b2c.utils.B2CExceptionUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -25,6 +29,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -58,6 +63,8 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 	private final AssetLookupCacheService assetLookupCacheService;
 
 	private final LogFileSource logFileSource;
+
+	private final ProcessingStatisticsCollector statisticsCollector;
 
 	/**
 	 * Single-run mutex.
@@ -114,6 +121,8 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 			}
 
 			assetLookupCacheService.clearLookupCaches();
+			// Reset per-entity counters so this run starts clean (no residual state from a prior run)
+			statisticsCollector.reset();
 			try {
 				switch ( command.mode() ) {
 				case SEQUENTIAL -> processSequential( pending, command, runId );
@@ -121,6 +130,9 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 				}
 			}
 			finally {
+				// Emit the consolidated per-entity report whether the run succeeded or failed,
+				// so partial progress is always visible.
+				statisticsCollector.logConsolidatedReport( runId, command.dryRun() );
 				log.debug( "Finalizing report and clearing caches | runId={}", runId );
 				assetLookupCacheService.clearLookupCaches();
 			}
@@ -163,11 +175,19 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 	 */
 	private void processParallel( List<S3LogFile> files, DevAssetGarbageCollectionCommand command, String runId ) {
 		int parallelFiles = clampParallelFiles( command.parallelFiles() );
+		int totalInFlightApprox = parallelFiles * gcProperties.workerThreads();
 		log.info( "Parallel mode | runId={} | filesToProcess={} | parallelFiles={} | workerThreadsPerFile={} "
 						+ "| totalInFlightThreadsApprox={}",
 				runId, files.size(), parallelFiles, gcProperties.workerThreads(),
-				parallelFiles * gcProperties.workerThreads()
+				totalInFlightApprox
 		);
+
+		if ( totalInFlightApprox > gcProperties.maximumPoolSize() ) {
+			log.warn( "Parallel configuration may oversubscribe the DB connection pool — DB calls will queue/timeout "
+							+ "| parallelFiles={} | workerThreadsPerFile={} | totalInFlightApprox={} | maximumPoolSize={}",
+					parallelFiles, gcProperties.workerThreads(), totalInFlightApprox, gcProperties.maximumPoolSize()
+			);
+		}
 
 		ExecutorService pool = Executors.newFixedThreadPool(
 				parallelFiles,
@@ -241,6 +261,10 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 					runId, file.key(), Duration.between( fileStart, Instant.now() ), B2CExceptionUtils.toMap( e )
 			);
 		}
+		finally {
+			// Release the WRITE_TO_REMOVE file handle for this source file (no-op for other actions).
+			processor.closeRemoveWriterFor( fileKey );
+		}
 	}
 
 	private EfsFileWorker createWorker( DevAssetGarbageCollectionCommand command ) {
@@ -294,26 +318,34 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 			}
 
 			if ( ++batchCounter >= 1000 ) {
+				// Ensure every line submitted so far has actually been processed before persisting the
+				// checkpoint, otherwise a resume could skip orphans still in flight at checkpoint time.
+				worker.awaitInFlightCompletion();
 				FileCheckpointManager.saveCheckpoint( fileKey, currentLineNumber );
 				batchCounter = 0;
 			}
 		}
 
+		// Drain remaining in-flight tasks before the final checkpoint of this file.
+		worker.awaitInFlightCompletion();
 		FileCheckpointManager.saveCheckpoint( fileKey, currentLineNumber );
 	}
 
+	/**
+	 * Detects infrastructure/database failures that must abort the whole run instead of being logged and skipped.
+	 * <p>
+	 * Uses exception <b>type</b> matching (walking the cause chain) rather than fragile substring matching on class
+	 * names and messages. {@link SQLException} covers HikariCP pool exhaustion / connection failures
+	 * (e.g. {@code SQLTransientConnectionException}); {@link ConnectException} / {@link SocketTimeoutException} /
+	 * {@link TimeoutException} cover network-level failures reaching the database or S3.
+	 */
 	private boolean isCriticalInfrastructureError( Throwable e ) {
 		Throwable cause = e;
 		while ( cause != null ) {
-			String className = cause.getClass().getName();
-			String message = cause.getMessage() != null ? cause.getMessage().toLowerCase() : "";
-
-			if ( className.contains( "SQL" ) ||
-					className.contains( "ConnectException" ) ||
-					className.contains( "TimeoutException" ) ||
-					message.contains( "connection refused" ) ||
-					message.contains( "connection is not available" ) ||
-					message.contains( "closed connection" ) ) {
+			if ( cause instanceof SQLException
+					|| cause instanceof ConnectException
+					|| cause instanceof SocketTimeoutException
+					|| cause instanceof TimeoutException ) {
 				return true;
 			}
 			cause = cause.getCause();
@@ -359,6 +391,7 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 	}
 
 	@Override public void close() throws Exception {
+		processor.close();
 		if ( logFileSource instanceof AutoCloseable closeable ) {
 			closeable.close();
 		}

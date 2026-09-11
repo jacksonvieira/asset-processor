@@ -19,6 +19,9 @@ import pt.piscapisca.b2c.asset.processor.execution.EfsFileWorker;
  * @param workerThreads        number of threads inside a single {@link EfsFileWorker} used to process the individual
  *                             path lines of one S3 file. Total in-flight threads in parallel mode is approximately
  *                             {@code parallelFiles * workerThreads} — size the DB pool accordingly.
+ * @param maximumPoolSize      the HikariCP {@code database.maximum-pool-size}. Used to fail fast at startup if the
+ *                             per-file {@code workerThreads} alone would exceed the DB connection pool, which would
+ *                             otherwise surface at runtime as connection timeouts wrongly classified as critical.
  */
 public record EfsGarbageCollectorProperties(
 
@@ -32,7 +35,10 @@ public record EfsGarbageCollectorProperties(
 		int maxParallelFiles,
 
 		@Min( 1 )
-		int workerThreads
+		int workerThreads,
+
+		@Min( 1 )
+		int maximumPoolSize
 
 ) {
 
@@ -47,6 +53,12 @@ public record EfsGarbageCollectorProperties(
 			throw new IllegalArgumentException(
 					"b2c.companies.efs.garbage-collector.defaultParallelFiles (" + defaultParallelFiles
 							+ ") must be <= maxParallelFiles (" + maxParallelFiles + ")" );
+		}
+		if ( workerThreads > maximumPoolSize ) {
+			throw new IllegalArgumentException(
+					"b2c.companies.efs.garbage-collector.workerThreads (" + workerThreads
+							+ ") must be <= database.maximum-pool-size (" + maximumPoolSize
+							+ ") to avoid exhausting the DB connection pool" );
 		}
 	}
 }

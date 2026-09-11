@@ -4,6 +4,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jooq.DSLContext;
 import org.jooq.Field;
+import org.jooq.Record2;
+import org.jooq.Result;
+
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.jooq.impl.DSL.field;
 
@@ -239,5 +244,191 @@ public class AssetRepository {
 						.and( jsonField.isNotNull() )
 						.and( assetField.eq( fileName ) )
 		);
+	}
+
+	/**
+	 * Immutable holder for the set of asset filenames and thumbnails linked to a single
+	 * domain entity (vehicle, stand, company or person). Loaded once per entity so that
+	 * per-line orphan checks become in-memory set lookups instead of one SQL query per line
+	 * (eliminates the N+1 query pattern).
+	 */
+	public record AssetNames( Set<String> filenames, Set<String> thumbnails ) {
+
+		public static AssetNames empty() {
+			return new AssetNames( Set.of(), Set.of() );
+		}
+
+		/**
+		 * Membership check equivalent to the previous {@code assetField.eq( name )} predicate.
+		 *
+		 * @param name        the filename or thumbnail name to look up
+		 * @param isThumbnail whether to look up against the thumbnail set instead of the filename set
+		 * @return {@code true} if the name is present in the corresponding set
+		 */
+		public boolean contains( String name, boolean isThumbnail ) {
+			if ( name == null || name.isBlank() ) {
+				return false;
+			}
+			return ( isThumbnail ? thumbnails : filenames ).contains( name );
+		}
+
+		/**
+		 * Returns a new {@link AssetNames} combining this instance with {@code other}.
+		 */
+		public AssetNames merge( AssetNames other ) {
+			if ( other == null ) {
+				return this;
+			}
+			Set<String> mergedFilenames = new HashSet<>( this.filenames );
+			mergedFilenames.addAll( other.filenames );
+			Set<String> mergedThumbnails = new HashSet<>( this.thumbnails );
+			mergedThumbnails.addAll( other.thumbnails );
+			return new AssetNames( mergedFilenames, mergedThumbnails );
+		}
+	}
+
+	/**
+	 * Loads all filenames/thumbnails of active vehicle assets for a given vehicle ID in a single query.
+	 * Behaviour-equivalent to {@link #existsActiveVehicleAssetByVehicleId(String, Integer, boolean)} but
+	 * loads the whole set once instead of issuing one EXISTS query per candidate line.
+	 */
+	public AssetNames loadActiveVehicleAssetNamesByVehicleId( Integer vehicleId ) {
+		if ( vehicleId == null ) {
+			return AssetNames.empty();
+		}
+
+		log.trace( "Loading active vehicle asset names | vehicleId={}", vehicleId );
+
+		Result<Record2<String, String>> rows = dsl.select(
+					field( ENGINE_ASSET + ".filename", String.class ),
+					field( ENGINE_ASSET + ".thumbnail", String.class ) )
+				.from( ENGINE_ASSET )
+				.innerJoin( ENGINE_VEHICLE_ASSET )
+				.on( field( ENGINE_VEHICLE_ASSET + ".asset_id" )
+						.eq( field( ENGINE_ASSET + ".id" ) ) )
+				.innerJoin( ENGINE_VEHICLE ).on( field( ENGINE_VEHICLE + ".id" )
+						.eq( field( ENGINE_VEHICLE_ASSET + ".vehicle_id" ) ) )
+				.where( field( ENGINE_VEHICLE + ".id" ).eq( vehicleId ) )
+				.and( field( ENGINE_VEHICLE + ".active" ).isTrue() )
+				.fetch();
+
+		return toAssetNames( rows );
+	}
+
+	/**
+	 * Loads all filenames/thumbnails of active vehicle assets for a given vehicle UUID in a single query.
+	 * Behaviour-equivalent to {@link #existsActiveVehicleAssetByVehicleUuid(String, String, boolean)}.
+	 */
+	public AssetNames loadActiveVehicleAssetNamesByVehicleUuid( String vehicleUuid ) {
+		if ( vehicleUuid == null || vehicleUuid.isBlank() ) {
+			return AssetNames.empty();
+		}
+
+		log.trace( "Loading active vehicle asset names | vehicleUuid={}", vehicleUuid );
+
+		Result<Record2<String, String>> rows = dsl.select(
+					field( ENGINE_ASSET + ".filename", String.class ),
+					field( ENGINE_ASSET + ".thumbnail", String.class ) )
+				.from( ENGINE_ASSET )
+				.innerJoin( ENGINE_VEHICLE_ASSET )
+				.on( field( ENGINE_VEHICLE_ASSET + ".asset_id" )
+						.eq( field( ENGINE_ASSET + ".id" ) ) )
+				.innerJoin( ENGINE_VEHICLE ).on( field( ENGINE_VEHICLE + ".id" )
+						.eq( field( ENGINE_VEHICLE_ASSET + ".vehicle_id" ) ) )
+				.where( field( ENGINE_VEHICLE + ".vuuid" ).eq( vehicleUuid ) )
+				.and( field( ENGINE_VEHICLE + ".active" ).isTrue() )
+				.fetch();
+
+		return toAssetNames( rows );
+	}
+
+	/**
+	 * Loads all filenames/thumbnails of stand assets for a given stand ID in a single query.
+	 * Behaviour-equivalent to {@link #existsStandAssetByStandId(String, Integer, boolean)}.
+	 */
+	public AssetNames loadStandAssetNamesByStandId( Integer standId ) {
+		if ( standId == null ) {
+			return AssetNames.empty();
+		}
+
+		log.trace( "Loading stand asset names | standId={}", standId );
+
+		Result<Record2<String, String>> rows = dsl.select(
+					field( ENGINE_ASSET + ".filename", String.class ),
+					field( ENGINE_ASSET + ".thumbnail", String.class ) )
+				.from( ENGINE_ASSET )
+				.innerJoin( ENGINE_STAND_ASSET ).on( field( ENGINE_STAND_ASSET + ".asset_id" )
+						.eq( field( ENGINE_ASSET + ".id" ) ) )
+				.where( field( ENGINE_STAND_ASSET + ".stand_id" ).eq( standId ) )
+				.fetch();
+
+		return toAssetNames( rows );
+	}
+
+	/**
+	 * Loads company logo and logo_type asset names for a given company ID.
+	 * Combines both JSON columns, mirroring the previous pair of EXISTS checks
+	 * ({@link #existsCompanyLogoAsset} / {@link #existsCompanyLogoTypeAsset}).
+	 */
+	public AssetNames loadCompanyAssetNames( Integer companyId ) {
+		AssetNames logo = loadJsonAssetNames( ENGINE_COMPANY, "id", companyId, "logo" );
+		AssetNames logoType = loadJsonAssetNames( ENGINE_COMPANY, "id", companyId, "logo_type" );
+		return logo.merge( logoType );
+	}
+
+	/**
+	 * Loads person profile asset names for a given person ID.
+	 * Behaviour-equivalent to {@link #existsPersonProfileAsset(Integer, String, boolean)}.
+	 */
+	public AssetNames loadPersonProfileAssetNames( Integer personId ) {
+		return loadJsonAssetNames( ENGINE_PERSON, "id", personId, "image_profile" );
+	}
+
+	/**
+	 * Generic helper that loads asset names referenced inside an entity JSON column.
+	 */
+	private AssetNames loadJsonAssetNames( String tableName,
+			String entityIdColumnName,
+			Integer entityId,
+			String jsonColumnName ) {
+
+		if ( entityId == null ) {
+			return AssetNames.empty();
+		}
+
+		Field<Object> jsonField = field( tableName + "." + jsonColumnName, Object.class );
+		Field<Integer> entityIdField = field( tableName + "." + entityIdColumnName, Integer.class );
+		Field<Integer> assetId = jsonIdAsInt( jsonField );
+
+		Result<Record2<String, String>> rows = dsl.select(
+					field( ENGINE_ASSET + ".filename", String.class ),
+					field( ENGINE_ASSET + ".thumbnail", String.class ) )
+				.from( tableName )
+				.join( ENGINE_ASSET ).on( field( ENGINE_ASSET + ".id" ).eq( assetId ) )
+				.where( entityIdField.eq( entityId ) )
+				.and( jsonField.isNotNull() )
+				.fetch();
+
+		return toAssetNames( rows );
+	}
+
+	/**
+	 * Converts a two-column (filename, thumbnail) result set into an {@link AssetNames} holder,
+	 * skipping null/blank values.
+	 */
+	private AssetNames toAssetNames( Result<Record2<String, String>> rows ) {
+		Set<String> filenames = new HashSet<>();
+		Set<String> thumbnails = new HashSet<>();
+		for ( Record2<String, String> row : rows ) {
+			String filename = row.value1();
+			String thumbnail = row.value2();
+			if ( filename != null && !filename.isBlank() ) {
+				filenames.add( filename );
+			}
+			if ( thumbnail != null && !thumbnail.isBlank() ) {
+				thumbnails.add( thumbnail );
+			}
+		}
+		return new AssetNames( filenames, thumbnails );
 	}
 }

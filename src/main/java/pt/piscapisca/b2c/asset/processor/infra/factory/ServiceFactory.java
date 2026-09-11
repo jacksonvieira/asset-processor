@@ -11,6 +11,7 @@ import pt.piscapisca.b2c.asset.processor.infra.EfsGarbageCollectorS3Properties;
 import pt.piscapisca.b2c.asset.processor.infra.persistence.*;
 import pt.piscapisca.b2c.asset.processor.infra.source.LocalLogFileSource;
 import pt.piscapisca.b2c.asset.processor.infra.source.S3LogFileSourceImpl;
+import pt.piscapisca.b2c.asset.processor.infra.statistics.ProcessingStatisticsCollector;
 import pt.piscapisca.b2c.asset.processor.parser.PathDataExtractor;
 import pt.piscapisca.b2c.asset.processor.service.AssetLookupCacheService;
 import pt.piscapisca.b2c.asset.processor.service.AssetOrphaningService;
@@ -40,14 +41,15 @@ public class ServiceFactory {
 	) {
 		var gcConfig = config.b2c().companies().efs().garbageCollector();
 
-		log.error( "defaultParallelFiles  -----> {}",  gcConfig.defaultParallelFiles());
-		log.error( "maxParallelFiles  -----> {}",  gcConfig.maxParallelFiles());
-		log.error( "workerThreads  -----> {}",  gcConfig.workerThreads());
+		log.info( "EFS GC config | defaultParallelFiles={} | maxParallelFiles={} | workerThreads={} | maximumPoolSize={}",
+				gcConfig.defaultParallelFiles(), gcConfig.maxParallelFiles(), gcConfig.workerThreads(),
+				config.database().maximumPoolSize() );
 		EfsGarbageCollectorProperties gcProperties = new EfsGarbageCollectorProperties(
 				gcConfig.quarantinePath(),
 				gcConfig.defaultParallelFiles(),
 				gcConfig.maxParallelFiles(),
-				gcConfig.workerThreads()
+				gcConfig.workerThreads(),
+				config.database().maximumPoolSize()
 		);
 
 		LogFileSource logFileSource;
@@ -75,33 +77,37 @@ public class ServiceFactory {
 			logFileSource = new S3LogFileSourceImpl( s3Client, s3Props );
 		}
 
+		// The statistics collector is shared between the processor (writes) and the service (reads the report).
+		// It is reset at the start of each run, so there is no cross-run contamination.
+		ProcessingStatisticsCollector statisticsCollector = new ProcessingStatisticsCollector();
 		AssetLookupCacheService lookupCacheService = createAssetLookupCacheService( dsl );
-		EfsFileProcessor efsFileProcessor = createEfsFileProcessor( dsl, lookupCacheService, gcProperties );
+		EfsFileProcessor efsFileProcessor = createEfsFileProcessor( lookupCacheService, gcProperties,
+				statisticsCollector );
 
 		return new EfsGarbageCollectorService(
 				gcProperties,
 				efsFileProcessor,
 				lookupCacheService,
-				logFileSource
+				logFileSource,
+				statisticsCollector
 		);
 	}
 
 	/**
 	 * Instantiates and configures the {@link EfsFileProcessor} with its required data extractors,
-	 * orphaning services, and action executors registry.
+	 * orphaning services, action executors registry, and statistics collector.
 	 *
-	 * @param dsl                the jOOQ database context
-	 * @param lookupCacheService the asset cache service for fast validation
-	 * @param gcProperties       garbage collection runtime properties
+	 * @param lookupCacheService  the asset cache service for fast validation
+	 * @param gcProperties        garbage collection runtime properties
+	 * @param statisticsCollector run-scoped statistics aggregator for the consolidated end-of-run report
 	 * @return a configured {@link EfsFileProcessor} instance
 	 */
 	private static EfsFileProcessor createEfsFileProcessor(
-			DSLContext dsl,
 			AssetLookupCacheService lookupCacheService,
-			EfsGarbageCollectorProperties gcProperties
+			EfsGarbageCollectorProperties gcProperties,
+			ProcessingStatisticsCollector statisticsCollector
 	) {
-		AssetRepository assetRepository = new AssetRepository( dsl );
-		AssetOrphaningService orphaningService = new AssetOrphaningService( lookupCacheService, assetRepository );
+		AssetOrphaningService orphaningService = new AssetOrphaningService( lookupCacheService );
 		PathDataExtractor dataExtractor = new PathDataExtractor();
 
 		DeleteOrphanActionExecutor deleteExecutor = new DeleteOrphanActionExecutor();
@@ -112,7 +118,7 @@ public class ServiceFactory {
 				writeToRemoveFileOrphanActionExecutor );
 		OrphanActionExecutorRegistry executorRegistry = new OrphanActionExecutorRegistry( executors );
 
-		return new EfsFileProcessor( dataExtractor, orphaningService, executorRegistry );
+		return new EfsFileProcessor( dataExtractor, orphaningService, executorRegistry, statisticsCollector );
 	}
 
 	/**
@@ -126,7 +132,8 @@ public class ServiceFactory {
 				new VehicleRepository( dsl ),
 				new StandRepository( dsl ),
 				new PersonRepository( dsl ),
-				new CompanyRepository( dsl )
+				new CompanyRepository( dsl ),
+				new AssetRepository( dsl )
 		);
 	}
 }

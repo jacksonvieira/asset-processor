@@ -3,7 +3,11 @@ database:
   username: ${DB_USER}
   password: ${DB_PASSWORD}
   minimum-idle: 5
-  maximum-pool-size: 50
+  # Tamanho máximo do pool HikariCP. É o teto de ligações simultâneas à base de dados.
+  # REGRA: worker-threads (abaixo) tem de ser <= maximum-pool-size, senão o arranque falha
+  # (ver EfsGarbageCollectorProperties). Em modo PARALLEL_FILES o pico aproximado de
+  # ligações é parallel-files * worker-threads — dimensionar o pool em conformidade.
+  maximum-pool-size: ${DB_MAX_POOL_SIZE:50}
   connection-timeout-ms: 15000
   idle-timeout: 300000
   max-lifetime: 1800000
@@ -44,8 +48,13 @@ b2c:
         default-parallel-files: ${DEFAULT_PARALLEL_FILES:2}
         max-parallel-files: ${MAX_PARALLEL_FILES:3}
 
-        # Threads internas por arquivo (dentro do EfsFileWorker)
-        worker-threads: ${WORKER_THREADS:64}
+        # Threads internas por arquivo (dentro do EfsFileWorker).
+        # IMPORTANTE: este valor tem de ser <= database.maximum-pool-size, caso contrário
+        # cada arquivo esgota o pool de ligações e as consultas passam a dar timeout
+        # (que antes era interpretado como erro crítico e abortava a execução).
+        # Default reduzido para 16 (16 <= 50) para funcionar no bastion com recursos limitados;
+        # em PARALLEL_FILES manter parallel-files * worker-threads <= maximum-pool-size.
+        worker-threads: ${WORKER_THREADS:16}
 
         s3:
           bucket: ${S3_BUCKET_NAME}
