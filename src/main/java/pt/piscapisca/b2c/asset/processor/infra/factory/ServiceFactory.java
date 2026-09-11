@@ -11,6 +11,7 @@ import pt.piscapisca.b2c.asset.processor.infra.EfsGarbageCollectorS3Properties;
 import pt.piscapisca.b2c.asset.processor.infra.persistence.*;
 import pt.piscapisca.b2c.asset.processor.infra.source.LocalLogFileSource;
 import pt.piscapisca.b2c.asset.processor.infra.source.S3LogFileSourceImpl;
+import pt.piscapisca.b2c.asset.processor.infra.statistics.ProcessingStatisticsCollector;
 import pt.piscapisca.b2c.asset.processor.parser.PathDataExtractor;
 import pt.piscapisca.b2c.asset.processor.service.AssetLookupCacheService;
 import pt.piscapisca.b2c.asset.processor.service.AssetOrphaningService;
@@ -76,28 +77,35 @@ public class ServiceFactory {
 			logFileSource = new S3LogFileSourceImpl( s3Client, s3Props );
 		}
 
+		// The statistics collector is shared between the processor (writes) and the service (reads the report).
+		// It is reset at the start of each run, so there is no cross-run contamination.
+		ProcessingStatisticsCollector statisticsCollector = new ProcessingStatisticsCollector();
 		AssetLookupCacheService lookupCacheService = createAssetLookupCacheService( dsl );
-		EfsFileProcessor efsFileProcessor = createEfsFileProcessor( lookupCacheService, gcProperties );
+		EfsFileProcessor efsFileProcessor = createEfsFileProcessor( lookupCacheService, gcProperties,
+				statisticsCollector );
 
 		return new EfsGarbageCollectorService(
 				gcProperties,
 				efsFileProcessor,
 				lookupCacheService,
-				logFileSource
+				logFileSource,
+				statisticsCollector
 		);
 	}
 
 	/**
 	 * Instantiates and configures the {@link EfsFileProcessor} with its required data extractors,
-	 * orphaning services, and action executors registry.
+	 * orphaning services, action executors registry, and statistics collector.
 	 *
-	 * @param lookupCacheService the asset cache service for fast validation
-	 * @param gcProperties       garbage collection runtime properties
+	 * @param lookupCacheService  the asset cache service for fast validation
+	 * @param gcProperties        garbage collection runtime properties
+	 * @param statisticsCollector run-scoped statistics aggregator for the consolidated end-of-run report
 	 * @return a configured {@link EfsFileProcessor} instance
 	 */
 	private static EfsFileProcessor createEfsFileProcessor(
 			AssetLookupCacheService lookupCacheService,
-			EfsGarbageCollectorProperties gcProperties
+			EfsGarbageCollectorProperties gcProperties,
+			ProcessingStatisticsCollector statisticsCollector
 	) {
 		AssetOrphaningService orphaningService = new AssetOrphaningService( lookupCacheService );
 		PathDataExtractor dataExtractor = new PathDataExtractor();
@@ -110,7 +118,7 @@ public class ServiceFactory {
 				writeToRemoveFileOrphanActionExecutor );
 		OrphanActionExecutorRegistry executorRegistry = new OrphanActionExecutorRegistry( executors );
 
-		return new EfsFileProcessor( dataExtractor, orphaningService, executorRegistry );
+		return new EfsFileProcessor( dataExtractor, orphaningService, executorRegistry, statisticsCollector );
 	}
 
 	/**

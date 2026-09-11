@@ -11,6 +11,7 @@ import pt.piscapisca.b2c.asset.processor.execution.EfsFileWorker;
 import pt.piscapisca.b2c.asset.processor.execution.EfsPathFilter;
 import pt.piscapisca.b2c.asset.processor.infra.EfsGarbageCollectorProperties;
 import pt.piscapisca.b2c.asset.processor.infra.checkpoint.FileCheckpointManager;
+import pt.piscapisca.b2c.asset.processor.infra.statistics.ProcessingStatisticsCollector;
 import pt.piscapisca.b2c.hashids.SecretId;
 import pt.piscapisca.b2c.utils.B2CExceptionUtils;
 
@@ -62,6 +63,8 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 	private final AssetLookupCacheService assetLookupCacheService;
 
 	private final LogFileSource logFileSource;
+
+	private final ProcessingStatisticsCollector statisticsCollector;
 
 	/**
 	 * Single-run mutex.
@@ -118,6 +121,8 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 			}
 
 			assetLookupCacheService.clearLookupCaches();
+			// Reset per-entity counters so this run starts clean (no residual state from a prior run)
+			statisticsCollector.reset();
 			try {
 				switch ( command.mode() ) {
 				case SEQUENTIAL -> processSequential( pending, command, runId );
@@ -125,6 +130,9 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 				}
 			}
 			finally {
+				// Emit the consolidated per-entity report whether the run succeeded or failed,
+				// so partial progress is always visible.
+				statisticsCollector.logConsolidatedReport( runId, command.dryRun() );
 				log.debug( "Finalizing report and clearing caches | runId={}", runId );
 				assetLookupCacheService.clearLookupCaches();
 			}
