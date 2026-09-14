@@ -65,7 +65,7 @@ public class EfsFileProcessor implements AutoCloseable {
 	 */
 	public boolean process( String rawLine, String normalizedPath, String sourceId, boolean dryRun,
 			DevAssetGarbageCollectionCommand.OrphanAction orphanAction ) {
-		log.trace( "Processing path line | normalizedPath={} | sourceId={} | dryRun={} | orphanAction={}",
+		log.debug( "Processing path line | normalizedPath={} | sourceId={} | dryRun={} | orphanAction={}",
 				normalizedPath, sourceId, dryRun, orphanAction );
 		try {
 			// Step 1: parse path into typed asset descriptor
@@ -75,7 +75,7 @@ public class EfsFileProcessor implements AutoCloseable {
 				return false;
 			}
 
-			log.trace( "Extracted asset data successfully | path={} | asset={}", normalizedPath, asset );
+			log.debug( "Extracted asset data successfully | path={} | asset={}", normalizedPath, asset );
 
 			// Register path as analysed — happens for every successfully parsed asset
 			String entityKey = buildEntityKey( asset );
@@ -86,7 +86,7 @@ public class EfsFileProcessor implements AutoCloseable {
 			// Step 2: orphan check
 			boolean orphan = orphaningService.isOrphan( asset );
 			if ( !orphan ) {
-				log.trace( "Asset still referenced in DB — keeping file | path={}", normalizedPath );
+				log.debug( "Asset still referenced in DB — keeping file | path={}", normalizedPath );
 				statisticsCollector.recordToKeep( entityKey, entityLabel, entityType );
 				return false;
 			}
