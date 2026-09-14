@@ -175,7 +175,7 @@ public class ProcessingStatisticsCollector {
 
 		log.debug( "TOTAL | analisados={} | {}={} | continuarão={} | runId={}",
 				totalAnalyzed, removeLabel, totalRemove, totalKeep, runId );
-		log.info( "======================================================" );
+		log.debug( "======================================================" );
 	}
 
 	// -------------------------------------------------------------------------
