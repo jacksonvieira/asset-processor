@@ -252,6 +252,6 @@ public class EfsFileWorker {
 				Math.round( rate )
 		);
 
-		log.debug( "{}", finalMessage );
+		log.info( "{}", finalMessage );
 	}
 }
