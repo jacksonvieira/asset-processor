@@ -128,7 +128,7 @@ public class LocalLogFileSource implements LogFileSource {
 
 			// Move/Rename the original file to the new processed file
 			Files.move( originalPath, processedPath, StandardCopyOption.REPLACE_EXISTING );
-			log.info( "Marked local file as processed by renaming | processedPath={} | runId={}", processedPath,
+			log.debug( "Marked local file as processed by renaming | processedPath={} | runId={}", processedPath,
 					runId );
 		}
 		catch ( IOException e ) {

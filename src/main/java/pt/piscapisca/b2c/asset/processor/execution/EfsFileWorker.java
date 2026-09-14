@@ -201,7 +201,7 @@ public class EfsFileWorker {
 			return;
 		}
 
-		log.info( "Shutting down executor for source | sourceId={}", currentSourceId );
+		log.debug( "Shutting down executor for source | sourceId={}", currentSourceId );
 		executor.shutdown();
 		try {
 			if ( !executor.awaitTermination( executorTimeoutMinutes, TimeUnit.MINUTES ) ) {
@@ -252,6 +252,6 @@ public class EfsFileWorker {
 				Math.round( rate )
 		);
 
-		log.info( "{}", finalMessage );
+		log.debug( "{}", finalMessage );
 	}
 }
