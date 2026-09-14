@@ -244,6 +244,6 @@ public class AssetLookupCacheService {
 		standAssetNamesCache.invalidateAll();
 		companyAssetNamesCache.invalidateAll();
 		personAssetNamesCache.invalidateAll();
-		log.info( "EFS GC lookup caches cleared." );
+		log.debug( "EFS GC lookup caches cleared." );
 	}
 }

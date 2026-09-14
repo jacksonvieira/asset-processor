@@ -231,8 +231,8 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 	 * and (unless dry-run) tags the object as processed for future idempotency.
 	 */
 	private void processSingleFile( S3LogFile file, DevAssetGarbageCollectionCommand command, String runId ) {
-		log.info( "Processing S3/Local file | runId={} | key={} | entityId={} | sizeBytes={}",
-				runId, file.key(), file.entityId(), file.sizeBytes()
+		log.info( "Processing S3/Local file | key={} | entityId={} | sizeBytes={}",
+				 file.key(), file.entityId(), file.sizeBytes()
 		);
 
 		Instant fileStart = Instant.now();

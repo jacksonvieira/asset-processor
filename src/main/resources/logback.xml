@@ -31,10 +31,10 @@
     <logger name="org.jooq" level="WARN" />
     <logger name="software.amazon.awssdk" level="WARN" />
     <logger name="software.amazon.awssdk.http.apache.internal.conn.IdleConnectionReaper" level="OFF" />
-    <logger name="com.zaxxer.hikari" level="INFO" />
+    <logger name="com.zaxxer.hikari" level="OFF" />
 
     <!-- Nível raiz (Root) padrão para o resto da aplicação -->
-    <root level="INFO">
+    <root level="WARN">
         <appender-ref ref="STDOUT" />
     </root>
 
