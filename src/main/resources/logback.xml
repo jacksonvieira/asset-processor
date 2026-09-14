@@ -23,6 +23,8 @@
     <!-- Repositórios e Banco de Dados: WARN para evitar logar queries SQL repetitivas em massa -->
     <logger name="pt.piscapisca.b2c.asset.processor.infra.persistence" level="WARN" />
 
+    <logger name="pt.piscapisca.b2c.asset.processor.infra.statistics" level="INFO" />
+
     <!-- ========================================== -->
     <!-- Bibliotecas de Terceiros                   -->
     <!-- ========================================== -->
@@ -32,6 +34,7 @@
     <logger name="software.amazon.awssdk" level="WARN" />
     <logger name="software.amazon.awssdk.http.apache.internal.conn.IdleConnectionReaper" level="OFF" />
     <logger name="com.zaxxer.hikari" level="OFF" />
+    <logger name="org.jooq.impl.DefaultConnectionProvider" level="ERROR" />
 
     <!-- Nível raiz (Root) padrão para o resto da aplicação -->
     <root level="WARN">

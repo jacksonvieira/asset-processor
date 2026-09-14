@@ -137,7 +137,7 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 				assetLookupCacheService.clearLookupCaches();
 			}
 
-			log.info(
+			log.debug(
 					"EFS GC completed | runId={} | duration={} | filesProcessed={}", runId,
 					Duration.between( runStart, Instant.now() ), pending.size()
 			);

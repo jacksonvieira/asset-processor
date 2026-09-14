@@ -54,7 +54,7 @@ public class OrphanActionExecutorRegistry implements AutoCloseable {
 				) );
 
 		// Startup visibility: makes it trivial to confirm during deploy which actions are actually wired.
-		log.info( "OrphanActionExecutorRegistry initialised | actions={}", this.executors.keySet() );
+		log.debug( "OrphanActionExecutorRegistry initialised | actions={}", this.executors.keySet() );
 	}
 
 	/**
