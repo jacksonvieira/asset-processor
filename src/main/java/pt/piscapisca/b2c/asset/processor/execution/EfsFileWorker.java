@@ -81,7 +81,7 @@ public class EfsFileWorker {
 		this.startTime = Instant.now();
 		this.currentSourceId = sourceId;
 		this.isShutdown.set( false );
-		log.debug( "Starting processing worker for source | sourceId={} | dryRun={} | action={} | concurrency={}",
+		log.info( "Starting processing worker for source | sourceId={} | dryRun={} | action={} | concurrency={}",
 				sourceId, dryRun, orphanAction, concurrency );
 	}
 
@@ -201,7 +201,7 @@ public class EfsFileWorker {
 			return;
 		}
 
-		log.debug( "Shutting down executor for source | sourceId={}", currentSourceId );
+		log.info( "Shutting down executor for source | sourceId={}", currentSourceId );
 		executor.shutdown();
 		try {
 			if ( !executor.awaitTermination( executorTimeoutMinutes, TimeUnit.MINUTES ) ) {
@@ -252,6 +252,6 @@ public class EfsFileWorker {
 				Math.round( rate )
 		);
 
-		log.debug( "{}", finalMessage );
+		log.info( "{}", finalMessage );
 	}
 }
