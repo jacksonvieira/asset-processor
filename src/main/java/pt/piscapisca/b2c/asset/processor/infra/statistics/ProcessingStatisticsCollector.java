@@ -143,10 +143,10 @@ public class ProcessingStatisticsCollector {
 		long totalRemove = 0;
 		long totalKeep = 0;
 
-		log.info( "========== RELATÓRIO CONSOLIDADO | runId={} ==========", runId );
+		log.debug( "========== RELATÓRIO CONSOLIDADO | runId={} ==========", runId );
 
 		if ( !companies.isEmpty() ) {
-			log.info( "--- Companies ({}) ---", companies.size() );
+			log.debug( "--- Companies ({}) ---", companies.size() );
 			for ( EntityStats stats : companies ) {
 				long a = stats.analyzed.sum();
 				long r = stats.toRemove.sum();
@@ -154,7 +154,7 @@ public class ProcessingStatisticsCollector {
 				totalAnalyzed += a;
 				totalRemove += r;
 				totalKeep += k;
-				log.info( "{} analisou {} ficheiros, {} {} e {} continuarão | runId={}",
+				log.debug( "{} analisou {} ficheiros, {} {} e {} continuarão | runId={}",
 						stats.label, a, r, removeLabel, k, runId );
 			}
 		}
@@ -168,12 +168,12 @@ public class ProcessingStatisticsCollector {
 				totalAnalyzed += a;
 				totalRemove += r;
 				totalKeep += k;
-				log.info( "{} analisou {} ficheiros, {} {} e {} continuarão | runId={}",
+				log.debug( "{} analisou {} ficheiros, {} {} e {} continuarão | runId={}",
 						stats.label, a, r, removeLabel, k, runId );
 			}
 		}
 
-		log.info( "TOTAL | analisados={} | {}={} | continuarão={} | runId={}",
+		log.debug( "TOTAL | analisados={} | {}={} | continuarão={} | runId={}",
 				totalAnalyzed, removeLabel, totalRemove, totalKeep, runId );
 		log.info( "======================================================" );
 	}

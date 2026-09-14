@@ -81,7 +81,7 @@ public class EfsFileWorker {
 		this.startTime = Instant.now();
 		this.currentSourceId = sourceId;
 		this.isShutdown.set( false );
-		log.info( "Starting processing worker for source | sourceId={} | dryRun={} | action={} | concurrency={}",
+		log.debug( "Starting processing worker for source | sourceId={} | dryRun={} | action={} | concurrency={}",
 				sourceId, dryRun, orphanAction, concurrency );
 	}
 
