@@ -122,7 +122,7 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 
 			assetLookupCacheService.clearLookupCaches();
 			// Reset per-entity counters so this run starts clean (no residual state from a prior run)
-			statisticsCollector.reset();
+			//statisticsCollector.reset();
 			try {
 				switch ( command.mode() ) {
 				case SEQUENTIAL -> processSequential( pending, command, runId );
@@ -132,7 +132,7 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 			finally {
 				// Emit the consolidated per-entity report whether the run succeeded or failed,
 				// so partial progress is always visible.
-				statisticsCollector.logConsolidatedReport( runId, command.dryRun() );
+				//statisticsCollector.logConsolidatedReport( runId, command.dryRun() );
 				log.debug( "Finalizing report and clearing caches | runId={}", runId );
 				assetLookupCacheService.clearLookupCaches();
 			}
@@ -231,9 +231,11 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 	 * and (unless dry-run) tags the object as processed for future idempotency.
 	 */
 	private void processSingleFile( S3LogFile file, DevAssetGarbageCollectionCommand command, String runId ) {
-		log.info( "Processing S3/Local file | key={} | entityId={} | sizeBytes={}",
+		log.debug( "Processing S3/Local file | key={} | entityId={} | sizeBytes={}",
 				 file.key(), file.entityId(), file.sizeBytes()
 		);
+
+		log.info("Processing entityId={}", file.entityId());
 
 		Instant fileStart = Instant.now();
 		String fileKey = file.key();
