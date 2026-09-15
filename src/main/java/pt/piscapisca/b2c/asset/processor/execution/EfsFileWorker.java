@@ -247,7 +247,7 @@ public class EfsFileWorker {
 
         log.debug("{}", finalMessage);
 
-        log.info("entity [{}] finished.", extractEntityId(currentSourceId));
+        log.info("Entity = [{}] finished.", extractEntityId(currentSourceId));
     }
 
 

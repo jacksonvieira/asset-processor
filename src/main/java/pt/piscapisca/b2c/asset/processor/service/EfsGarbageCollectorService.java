@@ -235,7 +235,7 @@ public class EfsGarbageCollectorService implements AutoCloseable {
 				 file.key(), file.entityId(), file.sizeBytes()
 		);
 
-		log.info("Processing entityId={}", file.entityId());
+		log.info("Processing entityId = [{}]", file.entityId());
 
 		Instant fileStart = Instant.now();
 		String fileKey = file.key();
